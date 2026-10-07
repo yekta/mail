@@ -4,8 +4,12 @@ import SwiftUI
 struct ListHeader: View {
     @Environment(MailStore.self) private var store
 
+    static func shows(_ store: MailStore) -> Bool {
+        store.searchRows == nil && (!store.splits.isEmpty || store.filter != nil)
+    }
+
     var body: some View {
-        if store.searchRows == nil, !store.splits.isEmpty || store.filter != nil {
+        if Self.shows(store) {
             HStack(spacing: 12) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     TabStrip(

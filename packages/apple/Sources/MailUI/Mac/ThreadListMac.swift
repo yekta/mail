@@ -3,13 +3,15 @@ import AppKit
 import SwiftUI
 
 /// The thread list on the Mac: a table that only makes the rows on screen, each drawn in one
-/// pass. Hovering a row shows what can be done to it, as Newton did. ⌘-click picks rows,
+/// pass. It spans the window, so the whole page scrolls, and draws its rows in the centred card
+/// column. Hovering a row shows what can be done to it, as Newton did. ⌘-click picks rows,
 /// Shift-click picks the rows up to one.
 struct ThreadListMac: NSViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
     let selected: String?
     let checked: Set<String>
+    let topInset: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store) }
 
@@ -33,6 +35,8 @@ struct ThreadListMac: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(
             context.coordinator, selector: #selector(Coordinator.scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView
@@ -42,6 +46,9 @@ struct ThreadListMac: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        if scroll.contentInsets.top != topInset {
+            scroll.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
+        }
         context.coordinator.update(rows: rows, selected: selected, checked: checked)
     }
 
@@ -159,6 +166,8 @@ struct ThreadListMac: NSViewRepresentable {
             guard let view = table.rowView(atRow: table.clickedRow, makeIfNecessary: false) as? ThreadRowView,
                   let event = NSApp.currentEvent
             else { return }
+            let point = view.convert(event.locationInWindow, from: nil)
+            guard view.column.contains(point) else { return }
             if event.modifierFlags.contains(.command) {
                 store.toggleSelection(row.id)
                 return
@@ -168,7 +177,7 @@ struct ThreadListMac: NSViewRepresentable {
                 return
             }
             let threads = store.targets(for: row.id)
-            switch view.hit(view.convert(event.locationInWindow, from: nil)) {
+            switch view.hit(point) {
             case .star: store.run(.star, on: threads)
             case .archive: store.run(.archive, on: threads)
             case .trash: store.run(.trash, on: threads)
@@ -200,7 +209,15 @@ final class HoverTableView: NSTableView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        hovered = row(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        let index = row(at: point)
+        guard index >= 0, let view = rowView(atRow: index, makeIfNecessary: false) as? ThreadRowView,
+              view.column.contains(convert(point, to: view))
+        else {
+            hovered = -1
+            return
+        }
+        hovered = index
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -235,8 +252,14 @@ final class ThreadRowView: NSTableRowView {
 
     override var isFlipped: Bool { true }
 
+    /// Where the row is drawn: the card's width, centred, with the page's margin either side.
+    var column: NSRect {
+        let width = max(min(bounds.width - 48, Theme.cardWidth), 0)
+        return NSRect(x: ((bounds.width - width) / 2).rounded(), y: 0, width: width, height: bounds.height)
+    }
+
     private var starRect: NSRect {
-        NSRect(x: bounds.maxX - 40, y: (bounds.height - Self.iconSide) / 2, width: Self.iconSide, height: Self.iconSide)
+        NSRect(x: column.maxX - 40, y: (bounds.height - Self.iconSide) / 2, width: Self.iconSide, height: Self.iconSide)
     }
 
     private var actions: [(Hit, Symbol, NSRect)] {
@@ -257,18 +280,19 @@ final class ThreadRowView: NSTableRowView {
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
+        let column = column
         let fill = isCurrent || hovering ? Tokens.accent.platform : Tokens.card.platform
         fill.setFill()
-        bounds.fill()
+        column.fill()
         if isChecked {
             Tokens.primary.platform.withAlphaComponent(0.1).setFill()
-            bounds.fill()
+            column.fill()
         }
         Tokens.border.platform.setFill()
-        NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
+        NSRect(x: column.minX, y: column.maxY - 1, width: column.width, height: 1).fill()
         if let row {
             Theme.accountColor(row.color).platform.setFill()
-            NSRect(x: 0, y: 0, width: Theme.accountBarWidth, height: bounds.height).fill()
+            NSRect(x: column.minX, y: 0, width: Theme.accountBarWidth, height: column.height).fill()
         }
     }
 
@@ -277,15 +301,16 @@ final class ThreadRowView: NSTableRowView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard let row, let text else { return }
+        let left = column.minX
         let middle = bounds.height / 2
         if isChecked {
-            Self.drawSymbol(.squareCheck, in: NSRect(x: 13, y: middle - 8, width: 16, height: 16), color: Tokens.primary.platform)
+            Self.drawSymbol(.squareCheck, in: NSRect(x: left + 13, y: middle - 8, width: 16, height: 16), color: Tokens.primary.platform)
         } else if row.unread {
             Tokens.primary.platform.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 18, y: middle - 3.5, width: 7, height: 7)).fill()
+            NSBezierPath(ovalIn: NSRect(x: left + 18, y: middle - 3.5, width: 7, height: 7)).fill()
         }
-        Self.drawLine(text.senders, x: Self.sendersX, width: Self.sendersWidth, middle: middle)
-        var x = Self.sendersX + Self.sendersWidth + 14
+        Self.drawLine(text.senders, x: left + Self.sendersX, width: Self.sendersWidth, middle: middle)
+        var x = left + Self.sendersX + Self.sendersWidth + 14
         if row.attachment {
             Self.drawSymbol(.paperclip, in: NSRect(x: x, y: middle - 7, width: 14, height: 14), color: Tokens.mutedForeground.platform)
         }

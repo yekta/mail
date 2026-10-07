@@ -47,6 +47,8 @@ struct FakeGoogle {
     sent: Vec<String>,
     /// The bodies of batchModify, as Gmail was asked to change labels.
     modified: Vec<Value>,
+    /// How many sends Gmail refuses next, saying the user's quota is spent.
+    refused_sends: usize,
 }
 
 /// What every message at the fake Gmail is: a note with a PDF attached.
@@ -169,6 +171,10 @@ impl Server {
         self.google.lock().unwrap().sent.clone()
     }
 
+    pub fn refuse_sends(&self, count: usize) {
+        self.google.lock().unwrap().refused_sends = count;
+    }
+
     pub fn modified(&self) -> Vec<Value> {
         self.google.lock().unwrap().modified.clone()
     }
@@ -203,9 +209,17 @@ async fn fake_google(google: Arc<Mutex<FakeGoogle>>) -> String {
         let message = body.split_once("Content-Type: message/rfc822\r\n\r\n").unwrap_or_default().1;
         let message = message.rsplit_once("\r\n--").unwrap_or_default().0;
         let mut google = outbox.lock().unwrap();
-        google.sent.push(message.to_string());
-        let id = format!("sent-{}", google.sent.len());
-        async move { Json(json!({ "id": id, "threadId": "sent-thread" })) }
+        let answer = if google.refused_sends > 0 {
+            google.refused_sends -= 1;
+            let reason =
+                json!({ "error": { "status": "PERMISSION_DENIED", "errors": [{ "reason": "rateLimitExceeded" }] } });
+            (axum::http::StatusCode::FORBIDDEN, Json(reason))
+        } else {
+            google.sent.push(message.to_string());
+            let id = format!("sent-{}", google.sent.len());
+            (axum::http::StatusCode::OK, Json(json!({ "id": id, "threadId": "sent-thread" })))
+        };
+        async move { answer }
     };
     let message =
         |Path(id): Path<String>| async move { Json(json!({ "id": id, "raw": URL_SAFE_NO_PAD.encode(RAW_MESSAGE) })) };
