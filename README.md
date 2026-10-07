@@ -10,7 +10,8 @@ An email client that feels instant, for the Mac and iOS. Its look is the old New
 
 - **Nothing waits on the network.** The apps keep a local copy of your mail in SQLite. Opening, archiving, starring and searching read and write that copy at once; a server syncs it with your mail provider in the background.
 - **Gmail and JMAP.** Gmail through Google's API, and any JMAP server (Fastmail, Stalwart). Microsoft 365 and IMAP are planned.
-- **Newton's habits.** A unified inbox with an account colour on every thread, snooze, undo send, send later, and single keys on the Mac: `j`/`k` to move, `e` archive, `s` star, `#` trash, `u` unread, `h` snooze, `r` reply, `a` reply all, `f` forward, `c` compose, `/` search.
+- **Newton's habits.** A unified inbox with an account colour on every thread, snooze and remind me (typed as "tomorrow 9am"), undo send, send later, and single keys on the Mac: `j`/`k` to move, `e` archive, `s` star, `#` trash, `u` unread, `h` snooze, `r` reply, `a` reply all, `f` forward, `c` compose, `/` search, `z` undo, and `⌘K` for everything else (`?` lists them all).
+- **The rest of a full mail client.** Split Inbox (Important, your own splits, Other for newsletters), labels, multi-select, mute, block, one-click unsubscribe, Get Me To Zero, search with Gmail's operators, drafts on every device, signatures, aliases, snippets, attachments in and out, a contact pane, notifications and printing.
 - **Private by default.** Remote images stay blocked until you ask for them, and message bodies are sanitized before they are drawn.
 
 These are its programs:

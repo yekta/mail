@@ -6,7 +6,9 @@ import SwiftUI
 public struct MailMacApp: App {
     @State private var store = MailStore()
 
-    public init() {}
+    public init() {
+        Notifier.shared.install()
+    }
 
     private var defaultServer: String {
         Bundle.main.object(forInfoDictionaryKey: "MailServerURL") as? String ?? "http://localhost:3000"
@@ -22,17 +24,12 @@ public struct MailMacApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)
-        .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Message") { store.newMessage() }.keyboardShortcut("n")
-            }
-        }
+        .commands { MacCommands(store: store) }
     }
 }
 
 struct MacRoot: View {
     @Environment(MailStore.self) private var store
-    @State private var settings = false
     @State private var focusSearch = 0
     @State private var sidebarOpen = false
 
@@ -47,16 +44,13 @@ struct MacRoot: View {
                     if sidebarOpen { sidebar }
                 }
                 .overlay(alignment: .bottom) { ToastView() }
-                .background(KeyHandler(focusSearch: { focusSearch += 1 }, sidebarOpen: $sidebarOpen))
+                .background(KeyHandler(store: store, focusSearch: { focusSearch += 1 }, sidebarOpen: $sidebarOpen))
             }
         }
         .frame(minWidth: 860, minHeight: 520)
         .ignoresSafeArea()
         .sheet(item: $store.compose) { compose in ComposeView(compose: compose).environment(store) }
-        .sheet(isPresented: Binding(get: { store.snoozing != nil }, set: { if !$0 { store.snoozing = nil } })) {
-            SnoozePicker(threads: store.snoozing ?? []).environment(store)
-        }
-        .sheet(isPresented: $settings) { SettingsView().environment(store) }
+        .mailSheets(store)
     }
 
     /// Over the page, without moving it; a click beside it closes it.
@@ -70,7 +64,7 @@ struct MacRoot: View {
             SidebarView(
                 showSettings: {
                     showSidebar(false)
-                    settings = true
+                    store.settingsOpen = true
                 },
                 picked: { _ in showSidebar(false) }
             )
@@ -99,14 +93,21 @@ struct MacRoot: View {
                 Tokens.background.color
                 if let conversation = store.conversation {
                     ThreadScreen(conversation: conversation)
-                } else if store.visibleRows.isEmpty {
+                } else if store.visibleRows.isEmpty, store.splits.isEmpty, store.filter == nil {
                     EmptyList()
                 } else {
-                    ThreadListMac(store: store, rows: store.visibleRows, selected: store.selected)
-                        .frame(maxWidth: Theme.cardWidth)
-                        .background(Tokens.card.color)
-                        .padding(.top, 16)
-                        .padding(.horizontal, 24)
+                    VStack(spacing: 0) {
+                        ListHeader()
+                        if store.visibleRows.isEmpty {
+                            EmptyList().frame(maxHeight: .infinity)
+                        } else {
+                            ThreadListMac(store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection)
+                        }
+                    }
+                    .frame(maxWidth: Theme.cardWidth)
+                    .background(Tokens.card.color)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
                 }
             }
         }
@@ -130,6 +131,8 @@ struct MacTopBar: View {
                 Spacer()
                 ThreadActions(thread: open.id)
                 Spacer()
+            } else if !store.selection.isEmpty {
+                SelectionBar()
             } else {
                 HStack(spacing: 8) {
                     Image(.search, size: 14).foregroundStyle(Tokens.mutedForeground.color)
@@ -165,6 +168,7 @@ struct MacTopBar: View {
         .padding(.horizontal, 20)
         .frame(height: 52)
         .onChange(of: focusSearch) { searching = true }
+        .onChange(of: store.searchQuery) { _, text in if text.isEmpty { query = "" } }
     }
 }
 
@@ -181,70 +185,10 @@ struct EmptyList: View {
 
     private var message: String {
         if store.searchRows != nil { return "Nothing matches." }
+        if store.filter == .unread { return "Nothing unread." }
+        if store.filter == .starred { return "Nothing starred." }
         if store.connection == "connecting" && store.accounts.isEmpty { return "Syncing…" }
-        return store.mailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."
-    }
-}
-
-/// Newton's single keys: j/k to move, e archive, s star, # trash, u unread, h snooze, r reply,
-/// a reply all, f forward, c compose, / search, Esc back. Ignored while typing or with a sheet open.
-private struct KeyHandler: NSViewRepresentable {
-    @Environment(MailStore.self) private var store
-    let focusSearch: () -> Void
-    @Binding var sidebarOpen: Bool
-
-    final class Coordinator {
-        var monitor: Any?
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let store = store
-        let focusSearch = focusSearch
-        let sidebarOpen = $sidebarOpen
-        context.coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let typing = NSApp.keyWindow?.firstResponder is NSText
-            let sheetOpen = store.compose != nil || store.snoozing != nil || NSApp.keyWindow?.attachedSheet != nil
-            let modified = !event.modifierFlags.intersection([.command, .control, .option]).isEmpty
-            guard !typing, !sheetOpen, !modified else { return event }
-            if event.keyCode == 53, sidebarOpen.wrappedValue {
-                withAnimation(.easeOut(duration: 0.2)) { sidebarOpen.wrappedValue = false }
-                return nil
-            }
-            return MainActor.assumeIsolated { handle(event, store: store, focusSearch: focusSearch) } ? nil : event
-        }
-        return NSView()
-    }
-
-    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
-        if let monitor = coordinator.monitor { NSEvent.removeMonitor(monitor) }
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {}
-
-    @MainActor
-    private func handle(_ event: NSEvent, store: MailStore, focusSearch: () -> Void) -> Bool {
-        let thread = store.current
-        switch (event.keyCode, event.charactersIgnoringModifiers ?? "") {
-        case (125, _), (_, "j"): store.move(1)
-        case (126, _), (_, "k"): store.move(-1)
-        case (36, _): if let thread, store.conversation == nil { store.open(thread) } else { return false }
-        case (53, _):
-            if store.conversation != nil { store.close() } else if store.searchRows != nil { store.endSearch() } else { return false }
-        case (_, "e"): if let thread { store.act(.archive, on: [thread]) }
-        case (_, "s"): if let thread { store.toggleStar(thread) }
-        case (_, "#"): if let thread { store.act(.trash, on: [thread]) }
-        case (_, "u"): if let thread { store.toggleRead(thread) }
-        case (_, "h"): if let thread { store.snoozing = [thread] }
-        case (_, "r"): store.reply(.reply)
-        case (_, "a"): store.reply(.replyAll)
-        case (_, "f"): store.reply(.forward)
-        case (_, "c"): store.newMessage()
-        case (_, "/"): focusSearch()
-        default: return false
-        }
-        return true
+        return store.baseMailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."
     }
 }
 #endif

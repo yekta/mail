@@ -43,8 +43,22 @@ pub struct Account {
     pub status: String,
     /// The theme colour of its dot, `chart-1` to `chart-5`.
     pub color: String,
+    /// The addresses it can send as, the account's own first.
+    #[serde(default)]
+    pub identities: Vec<Identity>,
     pub deleted: bool,
     pub rev: i64,
+}
+
+/// An address an account sends as, with its name and the signature its provider keeps for it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Identity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub email: String,
+    /// Plain text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -117,8 +131,25 @@ pub struct Message {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub snoozed_until: Option<i64>,
+    /// Sent to a list or by a machine (a newsletter, a notification), not by a person.
+    #[serde(default)]
+    pub bulk: bool,
+    /// How to leave the list it came from, from its List-Unsubscribe headers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsubscribe: Option<Unsubscribe>,
     pub deleted: bool,
     pub rev: i64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Unsubscribe {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailto: Option<String>,
+    /// The URL takes RFC 8058's one-click POST.
+    #[serde(default)]
+    pub one_click: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -144,4 +175,54 @@ pub struct Draft {
     /// The provider thread a reply belongs to.
     #[serde(default)]
     pub thread_id: Option<String>,
+    /// One of the account's identities to send as; none for its first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Address>,
+    /// `text` as HTML. The core makes it when sending.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    /// The text quoted under a reply, kept apart while writing. The core folds it into `text` and
+    /// `html` when sending, so the server never sees it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quote: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<DraftAttachment>,
+    /// A message whose attachments go along, for a forward.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_attachments_of: Option<String>,
+}
+
+/// A file going out with a draft. `path` is where it is on the device that wrote the draft;
+/// `upload` the id the server gave it once uploaded. The server only sends uploaded ones.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DraftAttachment {
+    pub name: String,
+    pub mime: String,
+    pub size: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upload: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// A draft kept by the server, so every device of the user has it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SavedDraft {
+    /// Chosen by the device that started it.
+    pub id: String,
+    pub draft: Draft,
+    /// Unix milliseconds.
+    pub updated: i64,
+    pub deleted: bool,
+    pub rev: i64,
+}
+
+/// One synced setting of the user. The keys, and what their values are, are the core's
+/// (`crates/core/src/api.rs`); the server reads `muted:` and `blocked:` ones itself.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Preference {
+    pub key: String,
+    pub value: serde_json::Value,
+    pub deleted: bool,
+    pub rev: i64,
 }

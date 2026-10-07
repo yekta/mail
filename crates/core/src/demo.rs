@@ -2,13 +2,23 @@
 //! fresh local copy with it at every start and never connects.
 
 use anyhow::Result;
-use mail_protocol::{Account, Address, Attachment, Body, Label, Message, Provider, Recipients, role};
+use mail_protocol::{
+    Account, Address, Attachment, Body, Draft, Identity, Label, Message, Preference, Provider, Recipients, SavedDraft,
+    Unsubscribe, role,
+};
+use serde_json::json;
 
-use crate::store::Store;
+use crate::store::{Batch, Store};
 
 const ACCOUNTS: [(&str, &str, Provider, &str); 2] = [
     ("demo-home", "sam@example.com", Provider::Gmail, "chart-2"),
     ("demo-work", "sam@acme.example", Provider::Jmap, "chart-5"),
+];
+
+/// What each account sends as: its own address, and for work an alias, with their signatures.
+const IDENTITIES: [&[(&str, Option<&str>)]; 2] = [
+    &[("sam@example.com", None)],
+    &[("sam@acme.example", Some("Sam Lee\nProduct, Acme")), ("hello@acme.example", Some("The Acme team"))],
 ];
 
 const LABELS: [(&str, usize, &str); 2] = [("travel", 0, "Travel"), ("clients", 1, "Clients")];
@@ -30,6 +40,10 @@ struct Thread {
     attachment: Option<&'static str>,
     /// A designed mail's colour; plain text when none.
     designed: Option<&'static str>,
+    /// Sent by a machine or to a list.
+    bulk: bool,
+    /// How to leave its list: a one-click URL, or only a web page.
+    unsubscribe: Option<(&'static str, bool)>,
 }
 
 const INBOX: Thread = Thread {
@@ -43,6 +57,8 @@ const INBOX: Thread = Thread {
     snoozed: false,
     attachment: None,
     designed: None,
+    bulk: false,
+    unsubscribe: None,
 };
 
 const THREADS: &[Thread] = &[
@@ -69,6 +85,8 @@ const THREADS: &[Thread] = &[
         messages: &[(false, "Look up after ten on Saturday: the comet sits low in the west, just under the moon.", 35)],
         unread: true,
         designed: Some("#1d4ed8"),
+        bulk: true,
+        unsubscribe: Some(("https://orbit.example/unsubscribe", true)),
         ..INBOX
     },
     Thread {
@@ -77,6 +95,7 @@ const THREADS: &[Thread] = &[
         subject: "3 issues were assigned to you",
         messages: &[(false, "Status page copy, Release notes for 4.2, and Broken link in the welcome mail.", 50)],
         unread: true,
+        bulk: true,
         ..INBOX
     },
     Thread {
@@ -172,6 +191,8 @@ const THREADS: &[Thread] = &[
             2 * DAY,
         )],
         designed: Some("#b45309"),
+        bulk: true,
+        unsubscribe: Some(("https://kettle.example/preferences", false)),
         ..INBOX
     },
     Thread {
@@ -191,6 +212,8 @@ const THREADS: &[Thread] = &[
             2 * DAY + 5 * HOUR,
         )],
         designed: Some("#0f766e"),
+        bulk: true,
+        unsubscribe: Some(("https://status.example/unsubscribe", true)),
         ..INBOX
     },
     Thread {
@@ -204,6 +227,7 @@ const THREADS: &[Thread] = &[
         with: ("Harbor Bank", "statements@harbor.example"),
         subject: "Your statement for September is ready",
         messages: &[(false, "Your statement for September is ready to view in the app.", 4 * DAY)],
+        bulk: true,
         ..INBOX
     },
     Thread {
@@ -277,12 +301,21 @@ pub fn fill(store: &mut Store, now: i64) -> Result<()> {
     store.clear()?;
     let accounts: Vec<Account> = ACCOUNTS
         .iter()
-        .map(|(id, address, provider, color)| Account {
+        .enumerate()
+        .map(|(index, (id, address, provider, color))| Account {
             id: id.to_string(),
             provider: *provider,
             address: address.to_string(),
             status: "ready".into(),
             color: color.to_string(),
+            identities: IDENTITIES[index]
+                .iter()
+                .map(|(email, signature)| Identity {
+                    name: Some("Sam Lee".into()),
+                    email: email.to_string(),
+                    signature: signature.map(String::from),
+                })
+                .collect(),
             deleted: false,
             rev: 1,
         })
@@ -335,6 +368,12 @@ pub fn fill(store: &mut Store, now: i64) -> Result<()> {
                 in_reply_to: None,
                 references: Vec::new(),
                 snoozed_until: thread.snoozed.then_some(now + 15 * HOUR * 60_000),
+                bulk: thread.bulk,
+                unsubscribe: thread.unsubscribe.map(|(url, one_click)| Unsubscribe {
+                    url: Some(url.into()),
+                    mailto: None,
+                    one_click,
+                }),
                 deleted: false,
                 rev: 1,
             });
@@ -345,7 +384,34 @@ pub fn fill(store: &mut Store, now: i64) -> Result<()> {
             bodies.push((id, body));
         }
     }
-    store.apply_changes(&accounts, &labels, &messages, 0)?;
+    let preferences = [
+        ("split_inbox", json!(true)),
+        ("split:team", json!({ "name": "Team", "from": ["@acme.example"], "label": null, "order": 0 })),
+        ("signature:demo-home", json!("Sam")),
+        ("snippet:thanks", json!({ "name": "Thanks", "text": "Thanks {first_name}!" })),
+    ]
+    .map(|(key, value)| Preference { key: key.into(), value, deleted: false, rev: 1 });
+    let drafts = [SavedDraft {
+        id: "demo-draft".into(),
+        draft: Draft {
+            account_id: ACCOUNTS[1].0.into(),
+            to: vec![Address::new(Some("Priya Shah"), "priya@acme.example")],
+            subject: "Release notes for 4.2".into(),
+            text: "Here is a first pass at the notes. The search part still needs a screenshot.".into(),
+            ..Default::default()
+        },
+        updated: now - 40 * 60_000,
+        deleted: false,
+        rev: 1,
+    }];
+    store.apply_changes(Batch {
+        accounts: &accounts,
+        labels: &labels,
+        messages: &messages,
+        preferences: &preferences,
+        drafts: &drafts,
+        cursor: Some(0),
+    })?;
     for (id, body) in bodies {
         store.save_body(&id, &body)?;
     }
@@ -384,9 +450,14 @@ mod tests {
         fill(&mut store, mail_protocol::now_ms()).unwrap();
         fill(&mut store, mail_protocol::now_ms()).unwrap();
 
-        let count = |mailbox: &str| store.thread_rows(mailbox, 0, 100, &Utc::now()).unwrap().1;
-        assert_eq!(count("inbox"), 16);
-        assert_eq!(count("demo-work/inbox"), 8);
+        let page = |mailbox: &str| store.thread_page(mailbox, 0, 100, None, &Utc::now()).unwrap();
+        let count = |mailbox: &str| page(mailbox).total;
+        assert_eq!(count("inbox"), 6, "a split inbox shows Important");
+        let splits: Vec<(String, u32)> = page("inbox").splits.into_iter().map(|tab| (tab.name, tab.total)).collect();
+        assert_eq!(splits, [("Important".into(), 6), ("Team".into(), 5), ("Other".into(), 5)]);
+        assert_eq!(count("drafts"), 1);
+        assert_eq!(page("drafts").rows[0].draft_id.as_deref(), Some("demo-draft"));
+        assert_eq!(page("demo-work/inbox").splits.iter().map(|tab| tab.total).sum::<u32>(), 8);
         assert_eq!(count("snoozed"), 1);
         assert_eq!(count("sent"), 4);
         assert_eq!(count("demo-home/label/travel"), 2);

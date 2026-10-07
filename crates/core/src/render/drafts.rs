@@ -28,7 +28,8 @@ fn prefixed(subject: &str, prefix: &str) -> String {
     }
 }
 
-fn line(addresses: &[Address]) -> String {
+/// Addresses as a header shows them: `Ann <ann@x.com>, bob@x.com`.
+pub fn line(addresses: &[Address]) -> String {
     addresses
         .iter()
         .map(|address| match &address.name {
@@ -67,10 +68,10 @@ where
     let cc: Vec<Address> = cc.into_iter().filter(|address| seen.insert(address.email.clone())).collect();
 
     let when = dates::quoted(message.date, zone);
-    let (subject, text) = match kind {
+    let (subject, quote) = match kind {
         ReplyKind::Forward => {
             let header = format!(
-                "\n\n---------- Forwarded message ----------\nFrom: {}\nDate: {when}\nSubject: {}\nTo: {}\n\n",
+                "---------- Forwarded message ----------\nFrom: {}\nDate: {when}\nSubject: {}\nTo: {}\n\n",
                 line(std::slice::from_ref(&message.from)),
                 message.subject,
                 line(&message.recipients.to)
@@ -81,7 +82,7 @@ where
             let quoted: Vec<String> = body.lines().map(|line| format!("> {line}").trim_end().to_string()).collect();
             (
                 prefixed(&message.subject, "Re:"),
-                format!("\n\nOn {when}, {} wrote:\n{}\n", message.from.display(), quoted.join("\n")),
+                format!("On {when}, {} wrote:\n{}", message.from.display(), quoted.join("\n")),
             )
         }
     };
@@ -93,7 +94,8 @@ where
         cc,
         bcc: Vec::new(),
         subject,
-        text,
+        text: String::new(),
+        quote: Some(quote),
         in_reply_to: match kind {
             ReplyKind::Forward => None,
             _ => message.message_id.clone(),
@@ -106,6 +108,9 @@ where
             ReplyKind::Forward => None,
             _ => Some(message.thread_id.clone()),
         },
+        forward_attachments_of: (kind == ReplyKind::Forward && !message.attachments.is_empty())
+            .then(|| message.id.clone()),
+        ..Default::default()
     }
 }
 
@@ -147,6 +152,8 @@ mod tests {
             in_reply_to: None,
             references: vec!["<zero@x>".into()],
             snoozed_until: None,
+            bulk: false,
+            unsubscribe: None,
             deleted: false,
             rev: 1,
         }
@@ -162,7 +169,8 @@ mod tests {
         assert_eq!(draft.to, vec![Address::new(Some("Ann Lee"), "ann@x.com")]);
         assert!(draft.cc.is_empty());
         assert_eq!(draft.subject, "Re: Lunch");
-        assert!(draft.text.ends_with("Ann Lee wrote:\n> Friday?\n> At noon\n"), "{}", draft.text);
+        assert!(draft.text.is_empty());
+        assert!(draft.quote.as_deref().unwrap().ends_with("Ann Lee wrote:\n> Friday?\n> At noon"), "{:?}", draft.quote);
         assert_eq!(draft.in_reply_to.as_deref(), Some("<one@x>"));
         assert_eq!(draft.references, ["<zero@x>", "<one@x>"]);
         assert_eq!(draft.thread_id.as_deref(), Some("t"));
@@ -183,7 +191,13 @@ mod tests {
         let draft = reply(&forwarded, "Body", ReplyKind::Forward, &me(), &Utc);
         assert!(draft.to.is_empty());
         assert_eq!(draft.subject, "Fwd: Lunch");
-        assert!(draft.text.contains("Forwarded message") && draft.text.ends_with("Body"));
+        let quote = draft.quote.unwrap();
+        assert!(quote.starts_with("---------- Forwarded message") && quote.ends_with("Body"), "{quote}");
         assert_eq!(draft.in_reply_to, None);
+        assert_eq!(draft.forward_attachments_of, None, "nothing to bring along");
+        forwarded.attachments =
+            vec![mail_protocol::Attachment { name: "a.pdf".into(), mime: "application/pdf".into(), size: 1 }];
+        let draft = reply(&forwarded, "Body", ReplyKind::Forward, &me(), &Utc);
+        assert_eq!(draft.forward_attachments_of.as_deref(), Some("m"));
     }
 }

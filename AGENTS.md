@@ -53,19 +53,24 @@ What the server and the core agree on.
 
 - `sign_in.rs`, `google.rs`: adding a Gmail account, Google's OAuth with PKCE. The code the app
   is sent back with works once, and only with the secret that started it.
-- `api.rs`: the code exchange, link tickets, JMAP accounts, the dev login, Gmail's push hook.
+- `api.rs`: the code exchange, link tickets, JMAP accounts, the dev login, Gmail's push hook,
+  uploads for outgoing attachments and the download of a message's attachments.
 - `db.rs`: Postgres. Every synced row has a `rev` from one sequence and a `deleted` tombstone.
   Every write to synced rows runs in `UserTx`, which holds the user's advisory lock (so one
   user's revs commit in order and a cursor never skips one) and calls `pg_notify('changes')`.
 - `changes.rs`: a batch of what changed after a cursor, read in one REPEATABLE READ snapshot.
 - `hub.rs`: the LISTEN connection that wakes a user's sockets and an account's worker.
 - `sync.rs`: the sync socket. `ops.rs`: applying a client's op, once, and queueing it for the
-  provider.
+  provider. Preferences and drafts are synced rows too.
+- `rules.rs`: what happens to mail new to the server: a muted thread's leaves the inbox, a blocked
+  sender's goes to trash, a reply ends its thread's snooze. `unsubscribe.rs`: leaving a list.
+- `search.rs`: Gmail's search operators turned into SQL.
 - `workers.rs`: one task per account: send the waiting ops, sync, fetch the newest bodies, sleep.
   What the provider says is not written over a message whose op the provider doesn't have yet.
 - `providers/`: `gmail.rs` and `jmap.rs`, both turned into `RemoteMessage`s. `mime.rs` reads raw
   MIME (bodies, attachments, headers) and builds what is sent.
-- `scheduler.rs`: snoozed mail coming back and mail waiting to be sent (undo-send, send-later).
+- `scheduler.rs`: snoozed mail coming back and mail waiting to be sent (undo-send, send-later,
+  remind me).
 - `seed.rs`: `mail-server seed` gives a Stalwart server a demo user with a few hundred messages.
 - `migrations/`: the schema. `e2e/`: the real router on a fresh database per test, with a fake
   Google; `e2e/stalwart.rs` runs Stalwart, the server and the core together.
@@ -78,13 +83,17 @@ events out through the callback given to `mail_core_start`) and a Rust library f
 
 - `core.rs`: one loop that owns all state. Anything that waits on the network runs in a task of
   its own and sends its result back to the loop.
-- `store.rs`: the SQLite copy, with FTS5 search and a `threads` table kept from the messages.
-  An op is written at once and kept in the outbox; the server's state of its messages waits in
-  `bases`, so a change from the server is rebased under it, and a refused op is rolled back.
+- `store.rs`: the SQLite copy, with FTS5 search and a `threads` table kept from the messages,
+  with each mailbox's counts and the inbox's splits. An op is written at once and kept in the
+  outbox; the server's state of its messages waits in `bases`, so a change from the server is
+  rebased under it, and a refused op is rolled back. It is a cache: a new schema rebuilds it.
+- `search.rs`: Gmail's search operators over FTS5. `undo.rs`: the ops that take an action back.
 - `link.rs`: the sync socket, reconnecting with backoff. `http.rs`: the server's HTTP API.
 - `render/`: what the apps draw. `rows.rs` ("Alice, me (3)"), `dates.rs`, `html.rs` (sanitized
   pages, remote images blocked, designed mail on a light paper card), `text.rs` (plain text with
-  links and folded quotes), `drafts.rs` (reply, reply all, forward).
+  links and folded quotes), `drafts.rs` (reply, reply all, forward), `compose.rs` (what is sent:
+  the signature, the quote, the HTML) and `times.rs` (snooze and send-later times, typed or
+  chosen).
 - `api.rs`: the JSON the apps and the core exchange.
 - `demo.rs`: made-up mail. With `demo` in its config (the apps' `--demo`) the core shows it and
   never connects.
@@ -103,18 +112,23 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 `Mac` and `iOS` what only one does, each file of those inside `#if os(…)`.
 
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `Models.swift` is what it answers,
-  `MailStore.swift` is the state the views show.
+  `MailStore.swift` is the state the views show (`+Actions.swift`: what can be done to threads),
+  `Preferences.swift` the synced settings, `Notifier.swift` notifications and the badge.
 - `Shared/Platform`: `Platform.swift` (what the two systems call differently; sizes are written
   as on the Mac and `Platform.scale` enlarges them on iOS) and `Symbol.swift` (the icons, from
   Lucide's font, `Fonts/lucide.ttf`; a new one is a case with its character from the same
   lucide-static version's `font/codepoints.json`).
 - `Shared/Theme`: `Tokens.swift` (generated) and `Theme.swift`.
-- `Shared/Views/UI`: the components: `ActionButton`, `IconButton`, `Avatar`, `InputField`,
-  `ToastView`. `Shared/Views/List/RowText.swift`: a thread row's text, for both lists.
+- `Shared/Views/UI`: the components: `ActionButton`, `IconButton`, `IconMenu`, `Avatar`,
+  `InputField`, `SearchField`, `Chip`, `ChoiceRow`, `TabStrip`, `ToastView`.
+  `Shared/Views/List/RowText.swift`: a thread row's text, for both lists.
+- `Shared/Views/Thread/ThreadActions.swift`: every action on threads, one list for the keys, the
+  toolbars, the menus and the palette. `Palette` (⌘K and the shortcuts sheet), `Pickers` (snooze
+  and labels), `Person` (the contact pane).
 - `Shared/Views/Thread`: the thread, and `MessageWebView.swift`, the pooled web views that draw
   bodies and report their height.
 - `Shared/Views/Sidebar`, `Compose`, `Onboarding`, `Settings`: SwiftUI.
-- `Mac/`: `MailMacApp.swift` (the window, the top bar, the single-key shortcuts) and
+- `Mac/`: `MailMacApp.swift` (the window, the top bar), `Keyboard.swift` (the single keys) and
   `ThreadListMac.swift` (an `NSTableView`).
 - `iOS/`: `MailIOSApp.swift` (the navigation stack) and `ThreadListIOS.swift` (a `UITableView`
   with the swipes).

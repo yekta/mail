@@ -3,10 +3,12 @@ import SwiftUI
 import UIKit
 
 /// The thread list on iOS: a table that only makes the rows on screen, with Newton's swipes —
-/// right to archive or mark read, left to snooze or delete.
+/// right to archive or mark read, left to snooze or delete. In edit mode, rows are picked.
 struct ThreadListIOS: UIViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
+    let editing: Bool
+    let checked: Set<String>
     let open: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store, open: open) }
@@ -18,6 +20,7 @@ struct ThreadListIOS: UIViewRepresentable {
         table.separatorInset = .zero
         table.separatorColor = Tokens.border.platform
         table.backgroundColor = Tokens.card.platform
+        table.allowsMultipleSelectionDuringEditing = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         context.coordinator.table = table
@@ -26,25 +29,65 @@ struct ThreadListIOS: UIViewRepresentable {
 
     func updateUIView(_ table: UITableView, context: Context) {
         context.coordinator.open = open
-        context.coordinator.update(rows: rows)
+        context.coordinator.update(rows: rows, editing: editing, checked: checked)
     }
 
+    @MainActor
     final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate {
         let store: MailStore
         var open: (String) -> Void
         weak var table: UITableView?
         private var rows: [ThreadRow] = []
         private var texts: [String: (ThreadRow, RowText)] = [:]
+        private var prefetch: DispatchWorkItem?
 
         init(store: MailStore, open: @escaping (String) -> Void) {
             self.store = store
             self.open = open
         }
 
-        func update(rows: [ThreadRow]) {
-            guard rows != self.rows else { return }
+        func update(rows: [ThreadRow], editing: Bool, checked: Set<String>) {
+            guard let table else { return }
+            let changed = Self.changes(from: self.rows, to: rows)
             self.rows = rows
-            table?.reloadData()
+            if let changed {
+                let visible = Set(table.indexPathsForVisibleRows ?? [])
+                let paths = changed.map { IndexPath(row: $0, section: 0) }.filter(visible.contains)
+                if !paths.isEmpty { table.reconfigureRows(at: paths) }
+            } else {
+                table.reloadData()
+            }
+            if table.isEditing != editing { table.setEditing(editing, animated: true) }
+            if editing { pick(checked) }
+            if changed != [] { schedulePrefetch() }
+        }
+
+        /// The rows that changed when the list holds the same threads in the same order; nil
+        /// when it doesn't, and the whole table is read again.
+        private static func changes(from old: [ThreadRow], to new: [ThreadRow]) -> IndexSet? {
+            guard old != new else { return [] }
+            guard old.count == new.count else { return nil }
+            var changed = IndexSet()
+            for index in new.indices where old[index] != new[index] {
+                guard old[index].id == new[index].id else { return nil }
+                changed.insert(index)
+            }
+            return changed
+        }
+
+        /// Shows the store's selection as the table's.
+        private func pick(_ checked: Set<String>) {
+            guard let table else { return }
+            let shown = Set((table.indexPathsForSelectedRows ?? []).compactMap { rows.indices.contains($0.row) ? rows[$0.row].id : nil })
+            guard shown != checked else { return }
+            for (index, row) in rows.enumerated() where checked.contains(row.id) != shown.contains(row.id) {
+                let path = IndexPath(row: index, section: 0)
+                if checked.contains(row.id) {
+                    table.selectRow(at: path, animated: false, scrollPosition: .none)
+                } else {
+                    table.deselectRow(at: path, animated: false)
+                }
+            }
         }
 
         private func text(for row: ThreadRow) -> RowText {
@@ -64,12 +107,40 @@ struct ThreadListIOS: UIViewRepresentable {
         }
 
         func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-            if indexPath.row > rows.count - 30 { MainActor.assumeIsolated { store.loadMore() } }
+            if indexPath.row > rows.count - 30 { store.loadMore() }
         }
 
         func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+            let id = rows[indexPath.row].id
+            guard !tableView.isEditing else {
+                store.selection.insert(id)
+                return
+            }
             tableView.deselectRow(at: indexPath, animated: true)
-            open(rows[indexPath.row].id)
+            open(id)
+        }
+
+        func tableView(_ tableView: UITableView, didDeselectRowAt indexPath: IndexPath) {
+            guard tableView.isEditing, rows.indices.contains(indexPath.row) else { return }
+            store.selection.remove(rows[indexPath.row].id)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            schedulePrefetch()
+        }
+
+        /// Asks for the bodies of the rows on screen once the list stops moving.
+        private func schedulePrefetch() {
+            prefetch?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let table = self.table else { return }
+                    let ids = (table.indexPathsForVisibleRows ?? []).compactMap { self.rows.indices.contains($0.row) ? self.rows[$0.row].id : nil }
+                    self.store.prefetch(ids)
+                }
+            }
+            prefetch = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         }
 
         private func swipe(_ title: String, _ symbol: Symbol, _ color: ThemeColor, _ perform: @escaping @MainActor () -> Void) -> UIContextualAction {
@@ -85,18 +156,21 @@ struct ThreadListIOS: UIViewRepresentable {
         func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
             let row = rows[indexPath.row]
             let store = store
+            guard row.draftId == nil else { return UISwipeActionsConfiguration(actions: []) }
             return UISwipeActionsConfiguration(actions: [
-                swipe("Archive", .archive, Tokens.chart4) { store.act(.archive, on: [row.id]) },
-                swipe(row.unread ? "Read" : "Unread", row.unread ? .mailOpen : .mail, Tokens.primary) { store.toggleRead(row.id) },
+                swipe("Archive", .archive, Tokens.chart4) { store.run(.archive, on: [row.id]) },
+                swipe(row.unread ? "Read" : "Unread", row.unread ? .mailOpen : .mail, Tokens.primary) { store.run(.read, on: [row.id]) },
             ])
         }
 
         func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
             let row = rows[indexPath.row]
             let store = store
+            let delete = swipe("Delete", .trash, Tokens.destructive) { store.run(.trash, on: [row.id]) }
+            guard row.draftId == nil else { return UISwipeActionsConfiguration(actions: [delete]) }
             return UISwipeActionsConfiguration(actions: [
-                swipe("Delete", .trash, Tokens.destructive) { store.act(.trash, on: [row.id]) },
-                swipe("Snooze", .clock, Tokens.chart3) { store.snoozing = [row.id] },
+                delete,
+                swipe(store.remindsInsteadOfSnoozing ? "Remind" : "Snooze", .clock, Tokens.chart3) { store.run(.snooze, on: [row.id]) },
             ])
         }
     }

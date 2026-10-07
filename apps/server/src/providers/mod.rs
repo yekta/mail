@@ -8,11 +8,12 @@ pub mod jmap;
 use std::collections::HashMap;
 use std::fmt;
 
-use mail_protocol::{Address, Draft, Op, Provider};
+use mail_protocol::{Address, Draft, Identity, Op, Provider};
 use uuid::Uuid;
 
 use crate::AppState;
 use crate::db::AccountRow;
+use crate::mime::File;
 
 /// The provider no longer accepts the credentials: the user has to sign in again.
 #[derive(Debug)]
@@ -25,6 +26,19 @@ impl fmt::Display for Reauth {
 }
 
 impl std::error::Error for Reauth {}
+
+/// The provider turned the request down for good (a bad or conflicting request), as opposed to
+/// failing for now; asking again won't help.
+#[derive(Debug)]
+pub struct Refused(pub String);
+
+impl fmt::Display for Refused {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the provider refused: {}", self.0)
+    }
+}
+
+impl std::error::Error for Refused {}
 
 #[derive(Clone)]
 pub enum Connection {
@@ -79,10 +93,27 @@ impl Connection {
         }
     }
 
-    pub async fn send(&self, draft: &Draft, from: &Address) -> anyhow::Result<()> {
+    /// Answers the sent message's provider id.
+    pub async fn send(&self, draft: &Draft, from: &Address, files: &[File]) -> anyhow::Result<Option<String>> {
         match self {
-            Connection::Gmail(gmail) => gmail.send(draft, from).await,
-            Connection::Jmap(jmap) => jmap.send(draft, from).await,
+            Connection::Gmail(gmail) => gmail.send(draft, from, files).await,
+            Connection::Jmap(jmap) => jmap.send(draft, from, files).await,
+        }
+    }
+
+    /// The addresses the account sends as, the default first.
+    pub async fn identities(&self) -> anyhow::Result<Vec<Identity>> {
+        match self {
+            Connection::Gmail(gmail) => gmail.identities().await,
+            Connection::Jmap(jmap) => jmap.identities().await,
+        }
+    }
+
+    /// Makes a label at the provider and answers its id there.
+    pub async fn create_label(&self, name: &str) -> anyhow::Result<String> {
+        match self {
+            Connection::Gmail(gmail) => gmail.create_label(name).await,
+            Connection::Jmap(jmap) => jmap.create_label(name).await,
         }
     }
 
@@ -98,6 +129,37 @@ impl Connection {
 /// A snippet on one line, with its whitespace collapsed.
 pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// HTML as plain text, as a signature is shown: tags dropped, a line per block, entities decoded.
+pub fn html_text(html: &str) -> String {
+    let mut text = String::new();
+    let mut rest = html;
+    while let Some(start) = rest.find('<') {
+        text.push_str(&rest[..start].replace(['\r', '\n'], " "));
+        let Some(end) = rest[start..].find('>') else {
+            rest = "";
+            break;
+        };
+        let tag = rest[start + 1..start + end].trim_start_matches('/').to_ascii_lowercase();
+        let name =
+            tag.split(|character: char| character.is_whitespace() || character == '/').next().unwrap_or_default();
+        let block = ["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"].contains(&name);
+        if name == "br" || (block && !text.ends_with('\n')) {
+            text.push('\n');
+        }
+        rest = &rest[start + end + 1..];
+    }
+    text.push_str(&rest.replace(['\r', '\n'], " "));
+    let lines: Vec<String> = unescape(&text).lines().map(one_line).collect();
+    let mut kept: Vec<String> = Vec::new();
+    for line in lines {
+        if line.is_empty() && kept.last().is_none_or(String::is_empty) {
+            continue;
+        }
+        kept.push(line);
+    }
+    kept.join("\n").trim().to_string()
 }
 
 /// Gmail's snippets come HTML-escaped.
@@ -146,6 +208,13 @@ pub fn unescape(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn turns_a_signature_into_text() {
+        let html =
+            "<div dir=\"ltr\">Ann Lee<div>CEO &amp; founder</div><br><div><a href=\"x\">ann.com</a>\n</div></div>";
+        assert_eq!(super::html_text(html), "Ann Lee\nCEO & founder\n\nann.com");
+    }
+
     #[test]
     fn unescapes_gmail_snippets() {
         assert_eq!(

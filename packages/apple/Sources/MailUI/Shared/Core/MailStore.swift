@@ -19,30 +19,14 @@ struct Compose: Identifiable {
     var draft: Draft
     var from: String
     var showCc: Bool
-}
-
-/// When a snooze can end.
-struct SnoozeChoice: Identifiable {
-    let id: String
-    let name: String
-    let until: Date
-
-    static func choices(now: Date = Date(), calendar: Calendar = .current) -> [SnoozeChoice] {
-        let at = { (day: Date, hour: Int) in calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day }
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-        let saturday = calendar.nextDate(after: now, matching: DateComponents(weekday: 7), matchingPolicy: .nextTime) ?? tomorrow
-        let monday = calendar.nextDate(after: now, matching: DateComponents(weekday: 2), matchingPolicy: .nextTime) ?? tomorrow
-        var choices = [SnoozeChoice(id: "later", name: "Later today", until: now.addingTimeInterval(3 * 3600))]
-        if calendar.component(.hour, from: now) < 18 {
-            choices.append(SnoozeChoice(id: "evening", name: "This evening", until: at(now, 19)))
-        }
-        choices += [
-            SnoozeChoice(id: "tomorrow", name: "Tomorrow", until: at(tomorrow, 8)),
-            SnoozeChoice(id: "weekend", name: "This weekend", until: at(saturday, 9)),
-            SnoozeChoice(id: "week", name: "Next week", until: at(monday, 8)),
-        ]
-        return choices
-    }
+    /// The saved draft it is kept as, once it is.
+    var draftId: String?
+    /// The thread it answers, to archive along with sending.
+    var thread: String?
+    /// When to bring the thread back if nobody answers.
+    var remindAt: TimeChoice?
+    /// Closing keeps it as a draft even unchanged: a message brought back from sending.
+    var keep = false
 }
 
 @Observable @MainActor
@@ -69,6 +53,24 @@ public final class MailStore {
     var compose: Compose?
     /// The threads to snooze, while the snooze choices are shown.
     var snoozing: [String]?
+    /// The tabs over a split inbox; empty without Split Inbox.
+    var splits: [SplitTab] = []
+    /// What the list is narrowed to.
+    var filter: Filter?
+    /// The threads picked to act on together.
+    var selection: Set<String> = []
+    /// Where a Shift-click or Shift+J/K selection grows from.
+    var selectionAnchor: String?
+    /// The threads being labelled or moved, while the labels are shown.
+    var labeling: Labeling?
+    /// What the command palette shows, while it is open.
+    var palette: PaletteScope?
+    var shortcutsOpen = false
+    var settingsOpen = false
+    /// A question to answer before something that can't be taken back.
+    var confirmation: Confirmation?
+    /// A thread a notification asked to show, for iOS to push.
+    var requestedThread: String?
     /// Threads whose remote images were allowed.
     var imagesShown: Set<String> = []
     var undoDelay: Int = UserDefaults.standard.object(forKey: "undoDelay") as? Int ?? 10 {
@@ -78,6 +80,19 @@ public final class MailStore {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
     }
 
+    // Compose, the thread page and preferences.
+    /// The synced preferences, by key.
+    var preferences: [String: JSONValue] = [:]
+    var preferencesLoaded = false
+    /// Attachments being downloaded, as `<message>/<index>`.
+    var downloading: Set<String> = []
+    /// Messages of the open thread unfolded by a click or the keyboard.
+    var unfoldedMessages: Set<String> = []
+    /// The message of the open thread that n and p are on.
+    var focusedMessage: String?
+    /// Each compose sheet's last save, so the next save and the send wait for it.
+    @ObservationIgnored private var draftSaves: [UUID: Task<String?, Never>] = [:]
+
     @ObservationIgnored private var toastAction: (() -> Void)?
     @ObservationIgnored private var searchRequest: UInt64 = 0
     @ObservationIgnored private var reloading = false
@@ -85,21 +100,35 @@ public final class MailStore {
     @ObservationIgnored private var staleWhileReloading = false
     @ObservationIgnored private var signIn: ASWebAuthenticationSession?
     @ObservationIgnored private let anchor = SignInAnchor()
+    /// The threads whose bodies were asked for ahead of time.
+    @ObservationIgnored var prefetched: Set<String> = []
 
     public init() {}
 
     /// The rows the list shows: the search's while searching.
     var visibleRows: [ThreadRow] { searchRows ?? rows }
 
+    /// The mailbox without its split: `inbox` for `inbox:other`.
+    var baseMailbox: String {
+        let parts = mailbox.split(separator: "/", omittingEmptySubsequences: false)
+        guard let last = parts.last, last.hasPrefix("inbox:") else { return mailbox }
+        return (parts.dropLast() + ["inbox"]).joined(separator: "/")
+    }
+
     var mailboxName: String {
         if searchRows != nil { return "Search" }
-        let parts = mailbox.split(separator: "/").map(String.init)
+        let parts = baseMailbox.split(separator: "/").map(String.init)
         let all = unified + accounts.flatMap(\.mailboxes)
-        let name = all.first(where: { $0.id == mailbox })?.name ?? "Inbox"
+        let name = all.first(where: { $0.id == baseMailbox })?.name ?? "Inbox"
         guard parts.count > 1, let account = accounts.first(where: { $0.id == parts[0] }) else {
             return name == "Inbox" && accounts.count > 1 ? "All Inboxes" : name
         }
         return "\(name) · \(account.address)"
+    }
+
+    /// Whether a sheet, the palette or a question is up, when the window's keys don't apply.
+    var sheetOpen: Bool {
+        compose != nil || snoozing != nil || labeling != nil || palette != nil || shortcutsOpen || settingsOpen || confirmation != nil
     }
 
     // MARK: Starting
@@ -108,6 +137,7 @@ public final class MailStore {
         guard !started else { return }
         started = true
         bridge.onEvent = { [weak self] event in self?.handle(event) }
+        Notifier.shared.open = { [weak self] thread in self?.show(thread: thread) }
         let demo = ProcessInfo.processInfo.arguments.contains("--demo")
         let folder = demo ? Platform.dataFolder.appendingPathComponent("Demo", isDirectory: true) : Platform.dataFolder
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -116,7 +146,11 @@ public final class MailStore {
             show("The mail store couldn't open.")
             return
         }
-        Task { await refresh() }
+        Outgoing.prune()
+        Task {
+            await refresh()
+            await loadPreferences()
+        }
     }
 
     func refresh() async {
@@ -131,7 +165,9 @@ public final class MailStore {
 
     private func handle(_ event: CoreEvent) {
         switch event {
-        case .changed(let mailboxes, let threads):
+        case .changed(let mailboxes, let threads, let preferences):
+            prefetched.subtract(threads)
+            if preferences { preferencesChanged() }
             Task {
                 if mailboxes { await reloadMailboxes() }
                 await reloadThreads()
@@ -145,14 +181,20 @@ public final class MailStore {
                 rows = []
                 unified = []
                 accounts = []
+                selection = []
+                Notifier.shared.setBadge(0)
             }
         case .sent:
             show("Sent.")
-        case .sendFailed(_, let error, let draft):
-            show(error, action: "Edit") { [weak self] in self?.compose = Compose(draft: draft, from: "", showCc: !draft.cc.isEmpty) }
+        case .sendFailed(_, let error, let draft, let draftId):
+            show(error, action: "Edit") { [weak self] in
+                self?.compose = Compose(draft: draft, from: "", showCc: !draft.cc.isEmpty, draftId: draftId, keep: true)
+            }
         case .searchResults(let request, let found):
             guard request == searchRequest, searchRows != nil else { return }
             searchRows = found
+        case .newMail(let messages):
+            Notifier.shared.notify(messages)
         case .error(let message):
             show(message)
         case .other:
@@ -162,10 +204,19 @@ public final class MailStore {
 
     func reloadMailboxes() async {
         guard let found = try? await bridge.call("mailboxes", as: Mailboxes.self) else { return }
-        unified = found.unified
-        accounts = found.accounts
+        if found.unified != unified { unified = found.unified }
+        if found.accounts != accounts { accounts = found.accounts }
+        Notifier.shared.setBadge(unified.first(where: { $0.id == "inbox" })?.unread ?? 0)
+        if !accounts.isEmpty { Notifier.shared.askPermission() }
     }
 
+    private func page(offset: Int, limit: Int) async -> ThreadPage? {
+        var fields: [String: Any] = ["mailbox": mailbox, "offset": offset, "limit": limit]
+        if let filter { fields["filter"] = filter.rawValue }
+        return try? await bridge.call("threads", fields, as: ThreadPage.self)
+    }
+
+    /// Reads the list again. What didn't change isn't set, so the views it would redraw don't.
     func reloadThreads() async {
         guard !reloading else {
             staleWhileReloading = true
@@ -174,10 +225,19 @@ public final class MailStore {
         reloading = true
         repeat {
             staleWhileReloading = false
-            let limit = max(200, rows.count)
-            if let page = try? await bridge.call("threads", ["mailbox": mailbox, "limit": limit], as: ThreadPage.self) {
-                rows = page.rows
-                total = page.total
+            let asked = (mailbox, filter)
+            guard let page = await page(offset: 0, limit: max(200, rows.count)), asked == (mailbox, filter) else { continue }
+            let oldIndex = selected.flatMap { id in rows.firstIndex(where: { $0.id == id }) }
+            if page.rows != rows { rows = page.rows }
+            if page.total != total { total = page.total }
+            if page.splits != splits { splits = page.splits }
+            guard searchRows == nil else { continue }
+            if !selection.isEmpty {
+                let kept = selection.intersection(rows.lazy.map(\.id))
+                if kept != selection { selection = kept }
+            }
+            if let selected, let oldIndex, !rows.contains(where: { $0.id == selected }) {
+                self.selected = rows.isEmpty ? nil : rows[min(oldIndex, rows.count - 1)].id
             }
         } while staleWhileReloading
         reloading = false
@@ -185,13 +245,17 @@ public final class MailStore {
 
     func loadMore() {
         guard rows.count < total, !reloading else { return }
+        reloading = true
+        let asked = (mailbox, filter)
+        let offset = rows.count
         Task {
-            reloading = true
-            defer { reloading = false }
-            let page = try? await bridge.call("threads", ["mailbox": mailbox, "offset": rows.count, "limit": 200], as: ThreadPage.self)
-            guard let page else { return }
-            rows += page.rows
-            total = page.total
+            if let page = await page(offset: offset, limit: 200), asked == (mailbox, filter), offset == rows.count {
+                rows += page.rows
+                total = page.total
+            }
+            reloading = false
+            guard staleWhileReloading else { return }
+            await reloadThreads()
         }
     }
 
@@ -201,13 +265,53 @@ public final class MailStore {
         searchRows = nil
         searchQuery = ""
         rows = []
+        selection = []
+        selectionAnchor = nil
+        selected = nil
         Task { await reloadThreads() }
+    }
+
+    /// One of the mailboxes every account has (`inbox`, `sent`, ...), in the account on screen
+    /// when one is.
+    func go(to kind: String) {
+        let parts = mailbox.split(separator: "/")
+        select(mailbox: parts.count > 1 ? "\(parts[0])/\(kind)" : kind)
+    }
+
+    /// Shows only unread or starred threads, or everything again.
+    func toggleFilter(_ filter: Filter) {
+        setFilter(self.filter == filter ? nil : filter)
+    }
+
+    func setFilter(_ filter: Filter?) {
+        guard filter != self.filter else { return }
+        self.filter = filter
+        selection = []
+        rows = []
+        Task { await reloadThreads() }
+    }
+
+    /// The next or previous tab of a split inbox.
+    func moveSplit(_ step: Int) {
+        guard !splits.isEmpty else { return }
+        let index = splits.firstIndex(where: { $0.mailbox == mailbox }) ?? 0
+        let next = splits[(index + step + splits.count) % splits.count].mailbox
+        guard next != mailbox else { return }
+        select(mailbox: next)
     }
 
     // MARK: Threads
 
+    func row(_ thread: String) -> ThreadRow? {
+        visibleRows.first(where: { $0.id == thread })
+    }
+
     func open(_ thread: String) {
         selected = thread
+        if let draft = row(thread)?.draftId {
+            openDraft(draft)
+            return
+        }
         Task {
             do {
                 conversation = try await bridge.call("open_thread", ["thread": thread, "images": imagesShown.contains(thread)], as: Conversation.self)
@@ -215,6 +319,14 @@ public final class MailStore {
                 show(error.localizedDescription)
             }
         }
+    }
+
+    /// Opens the thread of a notification.
+    func show(thread: String) {
+        open(thread)
+        #if os(iOS)
+        requestedThread = thread
+        #endif
     }
 
     private func reopen() async {
@@ -237,61 +349,113 @@ public final class MailStore {
     /// The thread an action from the keyboard or the toolbar is for: the open one, else the selected one.
     var current: String? { conversation?.id ?? selected }
 
-    func act(_ action: Action, on threads: [String], until: Date? = nil) {
+    /// The threads an action is for: the selection over the list, else the current thread.
+    var targets: [String] {
+        guard conversation == nil, !selection.isEmpty else { return current.map { [$0] } ?? [] }
+        return visibleRows.map(\.id).filter(selection.contains)
+    }
+
+    /// The threads an action on a row is for: the whole selection when the row is in it.
+    func targets(for thread: String) -> [String] {
+        selection.contains(thread) ? targets : [thread]
+    }
+
+    func act(_ action: Action, on given: [String], until: Date? = nil, label: String? = nil) {
+        let threads = given.filter { !Self.isDraft($0) }
         guard !threads.isEmpty else { return }
-        let leaving: Set<Action> = [.archive, .trash, .spam, .snooze, .inbox]
-        if leaving.contains(action), let open = conversation?.id, threads.contains(open) {
-            moveAfter(open)
-        } else if leaving.contains(action), let selected, threads.contains(selected) {
-            self.selected = neighbour(of: selected)
+        let leaving: Set<Action> = [.archive, .trash, .spam, .snooze, .inbox, .move, .mute, .block]
+        if leaving.contains(action) {
+            stepAway(from: Set(threads))
+            selection.subtract(threads)
         }
         var fields: [String: Any] = ["action": action.rawValue, "threads": threads]
         if let until { fields["until"] = Int64(until.timeIntervalSince1970 * 1000) }
+        if let label { fields["label"] = label }
         Task {
             do {
-                _ = try await bridge.call("act", fields, as: Empty.self)
+                report(try await bridge.call("act", fields, as: ActReply.self))
             } catch {
                 show(error.localizedDescription)
             }
-            let undoable: [Action: (String, Action)] = [.archive: ("Archived.", .inbox), .trash: ("Moved to Trash.", .inbox)]
-            if let (message, undo) = undoable[action] {
-                show(message, action: "Undo") { self.act(undo, on: threads) }
-            } else if action == .snooze, let until {
-                show("Snoozed until \(until.formatted(date: .abbreviated, time: .shortened)).")
+        }
+    }
+
+    /// Shows what an action did, with Undo when the core can take it back.
+    func report(_ reply: ActReply) {
+        if let url = reply.url.flatMap(URL.init(string:)) { Platform.open(url) }
+        guard let message = reply.message else { return }
+        guard reply.undo else {
+            show(message)
+            return
+        }
+        show(message, action: "Undo") { [weak self] in self?.undo() }
+    }
+
+    /// Takes back the last action that could be.
+    func undo() {
+        Task {
+            do {
+                show(try await bridge.call("undo", as: MessageReply.self).message)
+            } catch {
+                show(error.localizedDescription)
             }
         }
     }
 
     func toggleStar(_ thread: String) {
-        let starred = visibleRows.first(where: { $0.id == thread })?.starred ?? conversation?.starred ?? false
-        act(starred ? .unstar : .star, on: [thread])
+        toggleStar([thread])
+    }
+
+    func toggleStar(_ threads: [String]) {
+        act(allStarred(threads) ? .unstar : .star, on: threads)
     }
 
     func toggleRead(_ thread: String) {
-        let unread = visibleRows.first(where: { $0.id == thread })?.unread ?? false
-        act(unread ? .read : .unread, on: [thread])
-        if !unread, conversation?.id == thread { conversation = nil }
+        toggleRead([thread])
     }
 
-    private func neighbour(of thread: String) -> String? {
+    func toggleRead(_ threads: [String]) {
+        let unread = anyUnread(threads)
+        act(unread ? .read : .unread, on: threads)
+        if !unread, let open = conversation?.id, threads.contains(open) { conversation = nil }
+    }
+
+    func allStarred(_ threads: [String]) -> Bool {
+        if threads.count == 1, conversation?.id == threads[0] { return conversation?.starred ?? false }
+        let wanted = Set(threads)
+        let found = visibleRows.filter { wanted.contains($0.id) }
+        return !found.isEmpty && found.allSatisfy(\.starred)
+    }
+
+    func anyUnread(_ threads: [String]) -> Bool {
+        let wanted = Set(threads)
+        return visibleRows.contains { wanted.contains($0.id) && $0.unread }
+    }
+
+    /// The row after the given one that isn't leaving with it, else the one before.
+    private func neighbour(of thread: String, leaving: Set<String>) -> String? {
         let list = visibleRows
         guard let index = list.firstIndex(where: { $0.id == thread }) else { return nil }
-        if index + 1 < list.count { return list[index + 1].id }
-        return index > 0 ? list[index - 1].id : nil
+        if let after = list[(index + 1)...].first(where: { !leaving.contains($0.id) }) { return after.id }
+        return list[..<index].last(where: { !leaving.contains($0.id) })?.id
     }
 
-    /// Opens the next thread after one that leaves the list, as Newton did, or goes back to it.
-    private func moveAfter(_ thread: String) {
-        guard let next = neighbour(of: thread) else {
+    /// Opens the next thread after ones that leave the list, as Newton did, or goes back to it.
+    private func stepAway(from leaving: Set<String>) {
+        if let opened = conversation?.id, leaving.contains(opened) {
+            guard let next = neighbour(of: opened, leaving: leaving) else {
+                conversation = nil
+                return
+            }
+            #if os(macOS)
+            open(next)
+            #else
             conversation = nil
-            return
+            selected = next
+            #endif
+        } else if let selected, leaving.contains(selected) {
+            self.selected = neighbour(of: selected, leaving: leaving)
         }
-        #if os(macOS)
-        open(next)
-        #else
-        conversation = nil
-        selected = next
-        #endif
     }
 
     /// Moves the keyboard's selection, or the open thread, by `step` rows.
@@ -299,20 +463,48 @@ public final class MailStore {
         let list = visibleRows
         guard !list.isEmpty else { return }
         let index = current.flatMap { id in list.firstIndex(where: { $0.id == id }) } ?? (step > 0 ? -1 : list.count)
-        let next = list[min(max(index + step, 0), list.count - 1)].id
+        let nextIndex = min(max(index + step, 0), list.count - 1)
+        let next = list[nextIndex].id
         if conversation != nil {
             open(next)
         } else {
             selected = next
         }
+        prefetch(list[max(nextIndex - 2, 0)...min(nextIndex + 4, list.count - 1)].map(\.id))
         if index + step >= list.count - 20 { loadMore() }
+    }
+
+    /// Asks the core for the bodies of threads about to be opened.
+    func prefetch(_ threads: [String]) {
+        let fresh = threads.filter { !prefetched.contains($0) }
+        guard !fresh.isEmpty else { return }
+        prefetched.formUnion(fresh)
+        bridge.send("prefetch", ["threads": fresh])
     }
 
     // MARK: Writing
 
+    /// A new message from the first account.
     func newMessage() {
-        let account = accounts.first
-        compose = Compose(draft: Draft(accountId: account?.id ?? "", to: [], subject: "", text: ""), from: account?.address ?? "", showCc: false)
+        startDraft(to: [])
+    }
+
+    /// A new message to someone, from the contact pane.
+    func write(to address: Address) {
+        startDraft(to: [address])
+    }
+
+    private func startDraft(to: [Address]) {
+        Task {
+            do {
+                let made = try await bridge.call("new_draft", as: DraftReply.self)
+                var draft = made.draft
+                draft.to = to
+                compose = Compose(draft: draft, from: made.from, showCc: false)
+            } catch {
+                show(error.localizedDescription)
+            }
+        }
     }
 
     func reply(_ kind: ReplyKind, to thread: String? = nil) {
@@ -320,23 +512,89 @@ public final class MailStore {
         Task {
             do {
                 let reply = try await bridge.call("reply_draft", ["thread": thread, "kind": kind.rawValue], as: DraftReply.self)
-                compose = Compose(draft: reply.draft, from: reply.from, showCc: !reply.draft.cc.isEmpty)
+                compose = Compose(draft: reply.draft, from: reply.from, showCc: !reply.draft.cc.isEmpty, thread: thread)
             } catch {
                 show(error.localizedDescription)
             }
         }
     }
 
-    func send(_ draft: Draft) {
-        compose = nil
+    /// Opens a saved draft to write on.
+    func openDraft(_ id: String) {
         Task {
             do {
-                let sent = try await bridge.call("send", ["draft": CoreBridge.object(draft), "delay": undoDelay], as: SendReply.self)
-                guard undoDelay > 0 else { return }
-                show("Sending…", action: "Undo", duration: TimeInterval(undoDelay)) { self.undoSend(sent.opId) }
+                let opened = try await bridge.call("open_draft", ["id": id], as: DraftReply.self)
+                let thread = conversation?.draftId == id ? conversation?.id : nil
+                compose = Compose(
+                    draft: opened.draft, from: opened.from, showCc: !opened.draft.cc.isEmpty || !opened.draft.bcc.isEmpty,
+                    draftId: opened.id ?? id, thread: thread
+                )
             } catch {
                 show(error.localizedDescription)
-                compose = Compose(draft: draft, from: "", showCc: !draft.cc.isEmpty)
+            }
+        }
+    }
+
+    /// Keeps what a compose sheet holds, after any save of it still on its way, and answers the
+    /// saved draft's id.
+    @discardableResult
+    func saveDraft(_ compose: Compose) async -> String? {
+        let previous = draftSaves[compose.id]
+        let save = Task { () -> String? in
+            let id = await previous?.value ?? compose.draftId
+            var fields: [String: Any] = ["draft": CoreBridge.object(compose.draft)]
+            if let id { fields["id"] = id }
+            return (try? await bridge.call("save_draft", fields, as: IDReply.self).id) ?? id
+        }
+        draftSaves[compose.id] = save
+        return await save.value
+    }
+
+    /// Closes the compose sheet. What was written is kept as a draft.
+    func closeCompose(_ compose: Compose, keep: Bool) {
+        self.compose = nil
+        Task {
+            if keep {
+                await saveDraft(compose)
+                show("Draft saved.")
+            }
+            draftSaves[compose.id] = nil
+        }
+    }
+
+    func discardDraft(_ compose: Compose) {
+        self.compose = nil
+        Task {
+            let id = await draftSaves[compose.id]?.value ?? compose.draftId
+            draftSaves[compose.id] = nil
+            if let id { _ = try? await bridge.call("delete_draft", ["id": id], as: Empty.self) }
+            show("Draft discarded.")
+        }
+    }
+
+    /// Sends after the undo delay, or at `sendAt`; archives the thread it answers with `archive`.
+    func send(_ compose: Compose, at sendAt: Date? = nil, archive: Bool = false) {
+        self.compose = nil
+        if archive, let thread = compose.thread { act(.archive, on: [thread]) }
+        Task {
+            let draftId = await draftSaves[compose.id]?.value ?? compose.draftId
+            draftSaves[compose.id] = nil
+            var fields: [String: Any] = ["draft": CoreBridge.object(compose.draft), "delay": undoDelay]
+            if let sendAt { fields["send_at"] = Int64(sendAt.timeIntervalSince1970 * 1000) }
+            if let remind = compose.remindAt { fields["remind_at"] = remind.until }
+            if let draftId { fields["draft_id"] = draftId }
+            do {
+                let sent = try await bridge.call("send", fields, as: SendReply.self)
+                if let sendAt {
+                    show("Sending \(sendAt.formatted(date: .abbreviated, time: .shortened)).", action: "Undo") { self.undoSend(sent.opId) }
+                } else if undoDelay > 0 {
+                    show("Sending…", action: "Undo", duration: TimeInterval(undoDelay)) { self.undoSend(sent.opId) }
+                }
+            } catch {
+                show(error.localizedDescription)
+                var again = compose
+                again.draftId = draftId
+                self.compose = again
             }
         }
     }
@@ -345,11 +603,90 @@ public final class MailStore {
         Task {
             do {
                 let cancelled = try await bridge.call("cancel_send", ["op_id": opId], as: CancelReply.self)
-                compose = Compose(draft: cancelled.draft, from: accounts.first(where: { $0.id == cancelled.draft.accountId })?.address ?? "", showCc: !cancelled.draft.cc.isEmpty)
+                let from = accounts.first(where: { $0.id == cancelled.draft.accountId })?.address ?? ""
+                compose = Compose(
+                    draft: cancelled.draft, from: cancelled.draft.from?.email ?? from, showCc: !cancelled.draft.cc.isEmpty, draftId: cancelled.id, keep: true
+                )
             } catch {
                 show(error.localizedDescription)
             }
         }
+    }
+
+    /// The people an address field could mean, best first.
+    func contacts(_ query: String) async -> [Address] {
+        (try? await bridge.call("contacts", ["query": query], as: ContactList.self).contacts) ?? []
+    }
+
+    // The thread page and the contact pane.
+
+    /// An attachment as a file on this device, downloaded first if it has to be.
+    func openAttachment(message: String, index: Int) async -> URL? {
+        let key = "\(message)/\(index)"
+        downloading.insert(key)
+        defer { downloading.remove(key) }
+        do {
+            let found = try await bridge.call("open_attachment", ["message": message, "index": index], as: PathReply.self)
+            return URL(fileURLWithPath: found.path)
+        } catch {
+            show(error.localizedDescription)
+            return nil
+        }
+    }
+
+    func person(_ email: String) async -> Person? {
+        try? await bridge.call("person", ["email": email], as: Person.self)
+    }
+
+    /// Unfolds every message of the open thread.
+    func expandAllMessages() {
+        guard let conversation else { return }
+        unfoldedMessages.formUnion(conversation.messages.map(\.id))
+    }
+
+    /// Goes to the next (1) or the previous (-1) message of the open thread, unfolding it.
+    func moveMessage(_ step: Int) {
+        guard let messages = conversation?.messages, !messages.isEmpty else { return }
+        let index = focusedMessage.flatMap { id in messages.firstIndex(where: { $0.id == id }) } ?? (step > 0 ? -1 : messages.count)
+        let next = messages[min(max(index + step, 0), messages.count - 1)]
+        unfoldedMessages.insert(next.id)
+        focusedMessage = next.id
+    }
+
+    // MARK: Preferences
+
+    /// Reads the synced preferences again: when one changed, or when a view needs them.
+    func preferencesChanged() {
+        Task { await loadPreferences() }
+    }
+
+    func loadPreferences() async {
+        guard let list = try? await bridge.call("preferences", as: PreferenceList.self) else { return }
+        preferences = Dictionary(list.values.map { ($0.key, $0.value) }, uniquingKeysWith: { _, last in last })
+        preferencesLoaded = true
+    }
+
+    /// Changes a preference here at once and on the user's other devices after. Nil removes it.
+    func setPreference(_ key: String, _ value: JSONValue?) {
+        preferences[key] = value
+        let fields: [String: Any] = ["key": key, "value": value?.any ?? NSNull()]
+        Task {
+            do {
+                _ = try await bridge.call("set_preference", fields, as: Empty.self)
+            } catch {
+                show(error.localizedDescription)
+                await loadPreferences()
+            }
+        }
+    }
+
+    /// What goes under a message from an identity: the user's own signature for the account, or
+    /// else the provider's.
+    func signature(account: String, email: String?) -> String? {
+        if let own = preferences["signature:\(account)"]?.string, !own.isEmpty { return own }
+        let identities = accounts.first(where: { $0.id == account })?.identities ?? []
+        let identity = identities.first(where: { $0.email == email }) ?? identities.first
+        return identity?.signature.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: Search

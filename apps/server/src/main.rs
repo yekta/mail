@@ -10,17 +10,21 @@ mod hub;
 mod mime;
 mod ops;
 mod providers;
+mod rules;
 mod scheduler;
 mod seal;
+mod search;
 mod seed;
 mod sign_in;
 mod sync;
+mod unsubscribe;
 mod workers;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use axum::http::header::{REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use axum::routing::{get, post};
@@ -70,6 +74,8 @@ fn router(state: AppState) -> Router {
         .route("/api/link-ticket", post(api::link_ticket))
         .route("/api/accounts/jmap", post(api::add_jmap))
         .route("/api/dev/login", post(api::dev_login))
+        .route("/api/messages/{id}/attachments/{index}", get(api::attachment))
+        .route("/api/uploads", post(api::upload).layer(DefaultBodyLimit::max(api::UPLOAD_LIMIT)))
         .route("/hooks/gmail", post(api::gmail_hook))
         .route("/sync", get(sync::socket))
         .layer(header(X_CONTENT_TYPE_OPTIONS, "nosniff"))
@@ -84,6 +90,20 @@ async fn start_background(state: &AppState) {
     hub::listen(state.clone());
     state.workers.start_all(state).await;
     scheduler::start(state.clone());
+    let backfill = state.clone();
+    tokio::spawn(async move {
+        let stopping = backfill.stopping.subscribe();
+        while !*stopping.borrow() {
+            match db::backfill_search(&backfill.background, 2000).await {
+                Ok(true) => tokio::time::sleep(Duration::from_millis(50)).await,
+                Ok(false) => return,
+                Err(error) => {
+                    tracing::warn!("couldn't rebuild the search of older mail: {error}");
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                }
+            }
+        }
+    });
     let cleanup = state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(300));

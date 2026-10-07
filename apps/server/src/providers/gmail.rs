@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::{StreamExt, stream};
-use mail_protocol::{Address, Attachment, Draft, Op, role};
+use mail_protocol::{Address, Attachment, Draft, Identity, Op, role};
 use reqwest::{Method, StatusCode};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -17,16 +17,34 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::{Batch, Reauth, Synced, one_line, unescape};
+use super::{Batch, Reauth, Refused, Synced, html_text, one_line, unescape};
 use crate::db::{self, AccountRow, RemoteMessage};
+use crate::mime::File;
 use crate::{AppState, mime};
 
 pub const API_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 const PAGE: usize = 500;
 const BACKFILL_PAGE: usize = 100;
 const CONCURRENT_GETS: usize = 8;
-const HEADERS: [&str; 10] =
-    ["From", "To", "Cc", "Bcc", "Reply-To", "Subject", "Message-ID", "In-Reply-To", "References", "Content-Type"];
+const HEADERS: [&str; 15] = [
+    "From",
+    "To",
+    "Cc",
+    "Bcc",
+    "Reply-To",
+    "Subject",
+    "Message-ID",
+    "In-Reply-To",
+    "References",
+    "Content-Type",
+    "List-Unsubscribe",
+    "List-Unsubscribe-Post",
+    "List-Id",
+    "Precedence",
+    "Auto-Submitted",
+];
+/// Gmail's tabs for mail sent in bulk.
+const BULK_CATEGORIES: [&str; 4] = ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "CATEGORY_FORUMS"];
 
 #[derive(Clone)]
 pub struct Gmail {
@@ -93,6 +111,10 @@ struct SyncState {
     backfill_token: Option<String>,
     #[serde(default)]
     backfilled: bool,
+    /// The last 90 days were fetched again for what was added after they were first synced
+    /// (`bulk`, `unsubscribe`), keeping the history id.
+    #[serde(default)]
+    refreshed: bool,
 }
 
 impl Gmail {
@@ -152,16 +174,26 @@ impl Gmail {
         query: &[(&str, String)],
         body: Option<&Value>,
     ) -> anyhow::Result<T> {
-        for attempt in 0..3 {
-            let mut request = self
-                .http
-                .request(method.clone(), format!("{}{path}", self.api))
-                .query(query)
-                .bearer_auth(self.access_token().await?);
-            if let Some(body) = body {
-                request = request.json(body);
+        let url = format!("{}{path}", self.api);
+        let what = format!("{method} {path}");
+        self.execute(&what, || {
+            let request = self.http.request(method.clone(), &url).query(query);
+            match body {
+                Some(body) => request.json(body),
+                None => request,
             }
-            let response = request.send().await?;
+        })
+        .await
+    }
+
+    /// Sends what `build` makes with the access token, again after a refresh or a busy answer.
+    async fn execute<T: DeserializeOwned>(
+        &self,
+        what: &str,
+        build: impl Fn() -> reqwest::RequestBuilder,
+    ) -> anyhow::Result<T> {
+        for attempt in 0..3 {
+            let response = build().bearer_auth(self.access_token().await?).send().await?;
             let status = response.status();
             if status == StatusCode::UNAUTHORIZED && attempt == 0 {
                 *self.token.lock().await = None;
@@ -174,14 +206,18 @@ impl Gmail {
             if status == StatusCode::NOT_FOUND {
                 return Err(NotFound.into());
             }
+            if status == StatusCode::BAD_REQUEST || status == StatusCode::CONFLICT {
+                let text = response.text().await.unwrap_or_default();
+                return Err(Refused(format!("Gmail answered {what} with {status}: {text}")).into());
+            }
             if !status.is_success() {
                 let text = response.text().await.unwrap_or_default();
-                anyhow::bail!("Gmail answered {method} {path} with {status}: {text}");
+                anyhow::bail!("Gmail answered {what} with {status}: {text}");
             }
             let text = response.text().await?;
             return Ok(serde_json::from_str(if text.is_empty() { "null" } else { &text })?);
         }
-        anyhow::bail!("Gmail kept refusing {method} {path}")
+        anyhow::bail!("Gmail kept refusing {what}")
     }
 
     async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<T> {
@@ -199,6 +235,7 @@ impl Gmail {
             let ids = self.list("newer_than:90d", limit, None).await?.0;
             self.fetch_and_store(state, account, &labels, &ids).await?;
             sync.history_id = Some(history_id);
+            sync.refreshed = true;
             db::save_sync_state(&state.db, account.id, &json!(sync)).await?;
             return Ok(Synced { backfilling: true });
         };
@@ -216,6 +253,11 @@ impl Gmail {
             Err(error) => return Err(error),
         }
 
+        if !sync.refreshed && sync.history_id.is_some() {
+            let ids = self.list("newer_than:90d", state.config.initial_sync_limit, None).await?.0;
+            self.fetch_and_store(state, account, &labels, &ids).await?;
+            sync.refreshed = true;
+        }
         if !sync.backfilled && sync.history_id.is_some() {
             let (ids, next) = self.list("older_than:90d", BACKFILL_PAGE, sync.backfill_token.clone()).await?;
             self.fetch_and_store(state, account, &labels, &ids).await?;
@@ -333,7 +375,12 @@ impl Gmail {
     }
 
     pub async fn apply(&self, batch: &Batch, labels: &HashMap<Uuid, String>) -> anyhow::Result<()> {
-        let label = |id: &String| id.parse::<Uuid>().ok().and_then(|id| labels.get(&id).cloned());
+        let label = |id: &String| match id.as_str() {
+            role::INBOX => Some("INBOX".to_string()),
+            role::TRASH => Some("TRASH".to_string()),
+            role::SPAM => Some("SPAM".to_string()),
+            _ => id.parse::<Uuid>().ok().and_then(|id| labels.get(&id).cloned()),
+        };
         let (add, remove): (Vec<String>, Vec<String>) = match &batch.op {
             Op::SetUnread { unread: true, .. } => (vec!["UNREAD".into()], vec![]),
             Op::SetUnread { unread: false, .. } => (vec![], vec!["UNREAD".into()]),
@@ -345,7 +392,7 @@ impl Gmail {
             Op::Spam { .. } => (vec!["SPAM".into()], vec!["INBOX".into(), "TRASH".into()]),
             Op::AddLabel { label: id, .. } => (label(id).into_iter().collect(), vec![]),
             Op::RemoveLabel { label: id, .. } => (vec![], label(id).into_iter().collect()),
-            Op::Send { .. } | Op::CancelSend { .. } | Op::RemoveAccount { .. } => return Ok(()),
+            _ => return Ok(()),
         };
         if add.is_empty() && remove.is_empty() {
             return Ok(());
@@ -363,15 +410,60 @@ impl Gmail {
         Ok(URL_SAFE_NO_PAD.decode(raw)?)
     }
 
-    pub async fn send(&self, draft: &Draft, from: &Address) -> anyhow::Result<()> {
+    /// Goes through Gmail's upload URL, which takes messages up to 35 MB; the plain one takes 5.
+    pub async fn send(&self, draft: &Draft, from: &Address, files: &[File]) -> anyhow::Result<Option<String>> {
         let domain = from.email.split('@').nth(1).unwrap_or("gmail.com");
-        let raw = mime::build(draft, from, &mime::new_message_id(domain), true);
-        let mut body = json!({ "raw": URL_SAFE_NO_PAD.encode(raw) });
+        let raw = mime::build(draft, from, &mime::new_message_id(domain), true, files);
+        let mut metadata = json!({});
         if let Some(thread_id) = &draft.thread_id {
-            body["threadId"] = json!(thread_id);
+            metadata["threadId"] = json!(thread_id);
         }
-        let _: Value = self.request(Method::POST, "/messages/send", &[], Some(&body)).await?;
-        Ok(())
+        let boundary = format!("part-{}", crate::random_token());
+        let mut body = format!(
+            "--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{metadata}\r\n\
+             --{boundary}\r\nContent-Type: message/rfc822\r\n\r\n"
+        )
+        .into_bytes();
+        body.extend(raw);
+        body.extend(format!("\r\n--{boundary}--\r\n").into_bytes());
+        let url = format!("{}/messages/send", self.api.replacen("/gmail/v1/", "/upload/gmail/v1/", 1));
+        let content_type = format!("multipart/related; boundary={boundary}");
+        let sent: Value = self
+            .execute("POST /messages/send", || {
+                self.http
+                    .post(&url)
+                    .query(&[("uploadType", "multipart")])
+                    .header(reqwest::header::CONTENT_TYPE, &content_type)
+                    .body(body.clone())
+            })
+            .await?;
+        Ok(sent["id"].as_str().map(String::from))
+    }
+
+    /// The verified send-as addresses, the default first, then the account's own.
+    pub async fn identities(&self) -> anyhow::Result<Vec<Identity>> {
+        let response: Value = self.get("/settings/sendAs", &[]).await?;
+        let mut list: Vec<&Value> = response["sendAs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|send_as| send_as["isPrimary"] == true || send_as["verificationStatus"] == "accepted")
+            .collect();
+        list.sort_by_key(|send_as| (send_as["isDefault"] != true, send_as["isPrimary"] != true));
+        Ok(list
+            .into_iter()
+            .filter_map(|send_as| {
+                let address = Address::new(send_as["displayName"].as_str(), send_as["sendAsEmail"].as_str()?);
+                let signature = send_as["signature"].as_str().map(html_text).filter(|text| !text.is_empty());
+                Some(Identity { name: address.name, email: address.email, signature })
+            })
+            .collect())
+    }
+
+    pub async fn create_label(&self, name: &str) -> anyhow::Result<String> {
+        let body = json!({ "name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show" });
+        let label: Value = self.request(Method::POST, "/labels", &[], Some(&body)).await?;
+        label["id"].as_str().map(String::from).ok_or_else(|| anyhow::anyhow!("Gmail made the label without an id"))
     }
 
     pub async fn watch(&self, state: &AppState) -> anyhow::Result<()> {
@@ -415,6 +507,7 @@ fn remote(message: GmailMessage, labels: &HashMap<String, Uuid>) -> RemoteMessag
         }
     }
     let date = message.internal_date.and_then(|date| date.parse().ok()).or(headers.date).unwrap_or(0);
+    let bulk = headers.bulk || message.label_ids.iter().any(|label| BULK_CATEGORIES.contains(&label.as_str()));
     let attachments = match headers.multipart_mixed {
         true => vec![Attachment { name: String::new(), mime: String::new(), size: 0 }],
         false => Vec::new(),
@@ -434,6 +527,8 @@ fn remote(message: GmailMessage, labels: &HashMap<String, Uuid>) -> RemoteMessag
         message_id: headers.message_id,
         in_reply_to: headers.in_reply_to,
         references: headers.references,
+        bulk,
+        unsubscribe: headers.unsubscribe,
     }
 }
 
@@ -458,5 +553,22 @@ mod tests {
         assert_eq!(remote.snippet, "Hi & bye");
         assert_eq!(remote.date, 1_700_000_000_000);
         assert_eq!(remote.from.email, "ann@example.com");
+        assert!(!remote.bulk);
+    }
+
+    #[test]
+    fn promotions_and_lists_are_bulk() {
+        let message = |labels: Value, headers: Value| -> GmailMessage {
+            serde_json::from_value(
+                json!({ "id": "m", "threadId": "t", "labelIds": labels, "payload": { "headers": headers } }),
+            )
+            .unwrap()
+        };
+        let promotion = remote(message(json!(["INBOX", "CATEGORY_PROMOTIONS"]), json!([])), &HashMap::new());
+        assert!(promotion.bulk && promotion.unsubscribe.is_none());
+        let headers = json!([{ "name": "List-Unsubscribe", "value": "<mailto:leave@list.org>" }]);
+        let list = remote(message(json!(["INBOX"]), headers), &HashMap::new());
+        assert!(list.bulk);
+        assert_eq!(list.unsubscribe.unwrap().mailto.as_deref(), Some("mailto:leave@list.org"));
     }
 }

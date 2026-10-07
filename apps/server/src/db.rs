@@ -2,11 +2,14 @@
 //! so that user's revs commit in the order they were taken and a cursor never skips one, and it
 //! tells the user's sockets on commit.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use mail_protocol::{Account, Address, Attachment, Label, Message, MessageState, Provider, Recipients};
-use serde_json::Value;
+use mail_protocol::{
+    Account, Address, Attachment, Draft, Identity, Label, Message, MessageState, Op, Preference, Provider, Recipients,
+    SavedDraft, Unsubscribe,
+};
+use serde_json::{Value, json};
 use sqlx::types::Json;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -156,6 +159,18 @@ pub async fn cleanup(db: &PgPool) -> sqlx::Result<()> {
     sqlx::query("DELETE FROM outgoing WHERE status <> 'pending' AND created_at < now() - interval '7 days'")
         .execute(db)
         .await?;
+    // An upload a send waiting for its time or a saved draft still has stays.
+    sqlx::query(
+        "DELETE FROM uploads WHERE created_at < now() - interval '7 days'
+             AND NOT EXISTS (SELECT 1 FROM outgoing WHERE outgoing.user_id = uploads.user_id
+                 AND outgoing.status IN ('pending', 'sending')
+                 AND outgoing.draft->'attachments' @> jsonb_build_array(jsonb_build_object('upload', uploads.id::text)))
+             AND NOT EXISTS (SELECT 1 FROM drafts WHERE drafts.user_id = uploads.user_id AND NOT drafts.deleted
+                 AND drafts.draft->'attachments' @> jsonb_build_array(jsonb_build_object('upload', uploads.id::text)))",
+    )
+    .execute(db)
+    .await?;
+    sqlx::query("DELETE FROM reminders WHERE remind_at < now() - interval '7 days'").execute(db).await?;
     Ok(())
 }
 
@@ -172,16 +187,23 @@ pub struct AccountRow {
     pub sync_state: Value,
     pub status: String,
     pub color: String,
+    pub identities: Json<Vec<Identity>>,
     pub rev: i64,
     pub deleted: bool,
 }
 
-const ACCOUNT_COLUMNS: &str =
-    "id, user_id, provider, address, login, credentials, sync_state, status, color, rev, deleted";
+pub const ACCOUNT_COLUMNS: &str =
+    "id, user_id, provider, address, login, credentials, sync_state, status, color, identities, rev, deleted";
 
 impl AccountRow {
     pub fn provider(&self) -> Provider {
         Provider::parse(&self.provider).unwrap_or(Provider::Jmap)
+    }
+
+    /// The addresses that are the user's own: the account's and its identities'.
+    pub fn own_addresses(&self) -> HashSet<String> {
+        let identities = self.identities.iter().map(|identity| identity.email.to_lowercase());
+        identities.chain([self.address.to_lowercase()]).collect()
     }
 
     pub fn wire(&self) -> Account {
@@ -191,6 +213,7 @@ impl AccountRow {
             address: self.address.clone(),
             status: self.status.clone(),
             color: self.color.clone(),
+            identities: self.identities.0.clone(),
             deleted: self.deleted,
             rev: self.rev,
         }
@@ -294,6 +317,20 @@ pub async fn set_account_status(db: &PgPool, account: &AccountRow, status: &str)
     tx.commit().await
 }
 
+/// Keeps what the provider says the account sends as; its rev changes only when they did.
+pub async fn set_identities(db: &PgPool, account: &AccountRow, identities: &[Identity]) -> sqlx::Result<()> {
+    if identities == account.identities.0.as_slice() {
+        return Ok(());
+    }
+    let mut tx = UserTx::begin(db, account.user_id).await?;
+    sqlx::query("UPDATE accounts SET identities = $2, rev = nextval('revs') WHERE id = $1 AND NOT deleted")
+        .bind(account.id)
+        .bind(Json(identities))
+        .execute(&mut *tx.tx)
+        .await?;
+    tx.commit().await
+}
+
 pub async fn save_sync_state(db: &PgPool, account_id: Uuid, state: &Value) -> sqlx::Result<()> {
     sqlx::query("UPDATE accounts SET sync_state = $2 WHERE id = $1").bind(account_id).bind(state).execute(db).await?;
     Ok(())
@@ -336,7 +373,8 @@ pub async fn remove_account(db: &PgPool, user_id: Uuid, account_id: Uuid) -> sql
 pub struct LabelRow {
     pub id: Uuid,
     pub account_id: Uuid,
-    pub provider_id: String,
+    /// None until a label made in the apps has been made at the provider.
+    pub provider_id: Option<String>,
     pub name: String,
     pub rev: i64,
     pub deleted: bool,
@@ -384,11 +422,12 @@ pub async fn sync_labels(
         .bind(name)
         .fetch_optional(&mut *tx.tx)
         .await?
-        .or_else(|| existing.iter().find(|label| &label.provider_id == provider_id).map(|label| label.id))
+        .or_else(|| existing.iter().find(|label| label.provider_id.as_ref() == Some(provider_id)).map(|label| label.id))
         .unwrap_or_default();
         ids.insert(provider_id.clone(), id);
     }
-    for gone in existing.iter().filter(|label| !label.deleted && !ids.contains_key(&label.provider_id)) {
+    let gone = |label: &&LabelRow| label.provider_id.as_ref().is_some_and(|id| !ids.contains_key(id));
+    for gone in existing.iter().filter(|label| !label.deleted).filter(gone) {
         sqlx::query("UPDATE labels SET deleted = true, rev = nextval('revs') WHERE id = $1")
             .bind(gone.id)
             .execute(&mut *tx.tx)
@@ -396,6 +435,40 @@ pub async fn sync_labels(
     }
     tx.commit().await?;
     Ok(ids)
+}
+
+/// A label made in the apps. The account's worker makes it at the provider.
+pub async fn create_label(db: &PgPool, account: &AccountRow, id: Uuid, name: &str) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, account.user_id).await?;
+    sqlx::query(
+        "INSERT INTO labels (id, user_id, account_id, name, rev) VALUES ($1, $2, $3, $4, nextval('revs'))
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(id)
+    .bind(account.user_id)
+    .bind(account.id)
+    .bind(name)
+    .execute(&mut *tx.tx)
+    .await?;
+    tx.commit().await
+}
+
+pub async fn set_label_provider_id(db: &PgPool, label_id: Uuid, provider_id: &str) -> sqlx::Result<()> {
+    sqlx::query("UPDATE labels SET provider_id = $2 WHERE id = $1")
+        .bind(label_id)
+        .bind(provider_id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_label(db: &PgPool, account: &AccountRow, label_id: Uuid) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, account.user_id).await?;
+    sqlx::query("UPDATE labels SET deleted = true, rev = nextval('revs') WHERE id = $1")
+        .bind(label_id)
+        .execute(&mut *tx.tx)
+        .await?;
+    tx.commit().await
 }
 
 // ---------- messages ----------
@@ -420,12 +493,15 @@ pub struct MessageRow {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub snoozed_until: Option<DateTime<Utc>>,
+    pub bulk: bool,
+    pub unsubscribe: Option<Json<Unsubscribe>>,
     pub rev: i64,
     pub deleted: bool,
 }
 
 pub const MESSAGE_COLUMNS: &str = "id, account_id, provider_id, thread_id, from_name, from_email, recipients, subject, \
-     snippet, date, unread, starred, labels, attachments, message_id, in_reply_to, \"references\", snoozed_until, rev, deleted";
+     snippet, date, unread, starred, labels, attachments, message_id, in_reply_to, \"references\", snoozed_until, bulk, \
+     unsubscribe, rev, deleted";
 
 impl MessageRow {
     pub fn wire(self) -> Message {
@@ -446,6 +522,8 @@ impl MessageRow {
             in_reply_to: self.in_reply_to,
             references: self.references,
             snoozed_until: self.snoozed_until.map(millis),
+            bulk: self.bulk,
+            unsubscribe: self.unsubscribe.map(|unsubscribe| unsubscribe.0),
             deleted: self.deleted,
             rev: self.rev,
         }
@@ -478,65 +556,181 @@ pub struct RemoteMessage {
     pub message_id: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    pub bulk: bool,
+    pub unsubscribe: Option<Unsubscribe>,
 }
 
-/// Writes what the provider says. A message with changes the provider doesn't have yet is left
-/// alone, so its stale state doesn't flicker over them; one that didn't change keeps its rev.
+/// A message as an upsert left it, and whether it is new to the server.
+#[derive(sqlx::FromRow)]
+pub struct Written {
+    pub id: Uuid,
+    pub thread_id: String,
+    pub from_email: String,
+    pub labels: Vec<String>,
+    pub unread: bool,
+    pub starred: bool,
+    pub inserted: bool,
+}
+
+impl Written {
+    pub fn state(&self) -> MessageState {
+        MessageState { labels: self.labels.clone(), unread: self.unread, starred: self.starred, snoozed_until: None }
+    }
+}
+
+const UPSERT_MESSAGES: &str = "INSERT INTO messages (id, user_id, account_id, provider_id, thread_id, from_name, from_email,
+         recipients, subject, snippet, date, unread, starred, labels, attachments, message_id, in_reply_to, \"references\",
+         bulk, unsubscribe, search, rev)
+     SELECT gen_random_uuid(), $1, $2, m.provider_id, m.thread_id, m.from_name, m.from_email, m.recipients, m.subject,
+         m.snippet, timestamptz 'epoch' + m.date * interval '1 millisecond', m.unread, m.starred,
+         ARRAY(SELECT jsonb_array_elements_text(m.labels)), m.attachments, m.message_id, m.in_reply_to,
+         ARRAY(SELECT jsonb_array_elements_text(m.\"references\")), m.bulk, m.unsubscribe,
+         message_search(m.from_name, m.from_email, m.recipients, m.subject, m.snippet), nextval('revs')
+     FROM jsonb_to_recordset($3) AS m(provider_id TEXT, thread_id TEXT, from_name TEXT, from_email TEXT,
+         recipients JSONB, subject TEXT, snippet TEXT, date BIGINT, unread BOOLEAN, starred BOOLEAN, labels JSONB,
+         attachments JSONB, message_id TEXT, in_reply_to TEXT, \"references\" JSONB, bulk BOOLEAN, unsubscribe JSONB)
+     ON CONFLICT (account_id, provider_id) DO UPDATE SET
+         thread_id = excluded.thread_id, from_name = excluded.from_name, from_email = excluded.from_email,
+         recipients = excluded.recipients, subject = excluded.subject, snippet = excluded.snippet,
+         date = excluded.date, unread = excluded.unread, starred = excluded.starred, labels = excluded.labels,
+         attachments = CASE WHEN excluded.attachments = '[]'::jsonb THEN messages.attachments ELSE excluded.attachments END,
+         message_id = excluded.message_id, in_reply_to = excluded.in_reply_to,
+         \"references\" = excluded.\"references\", bulk = excluded.bulk, unsubscribe = excluded.unsubscribe,
+         search = CASE WHEN EXISTS (SELECT 1 FROM bodies WHERE bodies.message_id = messages.id)
+             THEN messages.search ELSE excluded.search END,
+         deleted = false, rev = nextval('revs')
+     WHERE NOT EXISTS (SELECT 1 FROM provider_ops WHERE provider_ops.message_id = messages.id)
+         AND (messages.deleted OR messages.unread <> excluded.unread OR messages.starred <> excluded.starred
+             OR messages.labels <> excluded.labels OR messages.subject <> excluded.subject
+             OR messages.snippet <> excluded.snippet OR messages.thread_id <> excluded.thread_id
+             OR messages.date <> excluded.date OR messages.bulk <> excluded.bulk
+             OR messages.unsubscribe IS DISTINCT FROM excluded.unsubscribe)
+     RETURNING id, thread_id, from_email, labels, unread, starred, (xmax = 0) AS inserted";
+
+/// Writes what the provider says, a batch per statement. A message with changes the provider
+/// doesn't have yet is left alone, so its stale state doesn't flicker over them; one that didn't
+/// change keeps its rev. Mail new to the server goes through the user's rules.
 pub async fn upsert_messages(db: &PgPool, account: &AccountRow, messages: &[RemoteMessage]) -> sqlx::Result<()> {
-    for chunk in messages.chunks(200) {
+    let mut seen = HashSet::new();
+    let unique: Vec<&RemoteMessage> =
+        messages.iter().rev().filter(|message| seen.insert(message.provider_id.as_str())).collect();
+    let mut queued = false;
+    for chunk in unique.chunks(500) {
+        let rows: Vec<Value> = chunk
+            .iter()
+            .map(|message| {
+                json!({
+                    "provider_id": message.provider_id, "thread_id": message.thread_id,
+                    "from_name": message.from.name, "from_email": message.from.email,
+                    "recipients": message.recipients, "subject": message.subject, "snippet": message.snippet,
+                    "date": message.date, "unread": message.unread, "starred": message.starred,
+                    "labels": message.labels, "attachments": message.attachments, "message_id": message.message_id,
+                    "in_reply_to": message.in_reply_to, "references": message.references, "bulk": message.bulk,
+                    "unsubscribe": message.unsubscribe,
+                })
+            })
+            .collect();
         let mut tx = UserTx::begin(db, account.user_id).await?;
-        for message in chunk {
-            let search = format!(
-                "{} {} {} {}",
-                message.subject,
-                message.from.name.as_deref().unwrap_or_default(),
-                message.from.email,
-                message.snippet
-            );
-            sqlx::query(
-                "INSERT INTO messages (id, user_id, account_id, provider_id, thread_id, from_name, from_email, recipients,
-                     subject, snippet, date, unread, starred, labels, attachments, message_id, in_reply_to, \"references\",
-                     search, rev)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                     to_tsvector('simple', $19), nextval('revs'))
-                 ON CONFLICT (account_id, provider_id) DO UPDATE SET
-                     thread_id = excluded.thread_id, from_name = excluded.from_name, from_email = excluded.from_email,
-                     recipients = excluded.recipients, subject = excluded.subject, snippet = excluded.snippet,
-                     date = excluded.date, unread = excluded.unread, starred = excluded.starred, labels = excluded.labels,
-                     attachments = CASE WHEN excluded.attachments = '[]'::jsonb THEN messages.attachments ELSE excluded.attachments END,
-                     message_id = excluded.message_id, in_reply_to = excluded.in_reply_to,
-                     \"references\" = excluded.\"references\", search = excluded.search, deleted = false,
-                     rev = nextval('revs')
-                 WHERE NOT EXISTS (SELECT 1 FROM provider_ops WHERE provider_ops.message_id = messages.id)
-                     AND (messages.deleted OR messages.unread <> excluded.unread OR messages.starred <> excluded.starred
-                         OR messages.labels <> excluded.labels OR messages.subject <> excluded.subject
-                         OR messages.snippet <> excluded.snippet OR messages.thread_id <> excluded.thread_id
-                         OR messages.date <> excluded.date)",
-            )
-            .bind(Uuid::new_v4())
+        let written: Vec<Written> = sqlx::query_as(UPSERT_MESSAGES)
             .bind(account.user_id)
             .bind(account.id)
-            .bind(&message.provider_id)
-            .bind(&message.thread_id)
-            .bind(&message.from.name)
-            .bind(&message.from.email)
-            .bind(Json(&message.recipients))
-            .bind(&message.subject)
-            .bind(&message.snippet)
-            .bind(from_millis(message.date))
-            .bind(message.unread)
-            .bind(message.starred)
-            .bind(&message.labels)
-            .bind(Json(&message.attachments))
-            .bind(&message.message_id)
-            .bind(&message.in_reply_to)
-            .bind(&message.references)
-            .bind(search)
-            .execute(&mut *tx.tx)
+            .bind(Json(rows))
+            .fetch_all(&mut *tx.tx)
             .await?;
-        }
+        apply_reminders(&mut tx, account.id).await?;
+        let new: Vec<Written> = written.into_iter().filter(|row| row.inserted).collect();
+        queued |= crate::rules::apply(&mut tx, account, &new).await?;
         tx.commit().await?;
     }
+    if queued {
+        crate::hub::notify_ops(db, account.id).await;
+    }
+    Ok(())
+}
+
+/// Changes the messages as `op` does to the state they are in, and queues it for their providers.
+pub async fn apply_op(tx: &mut UserTx, messages: &[(Uuid, MessageState)], op: &Op) -> sqlx::Result<()> {
+    if messages.is_empty() {
+        return Ok(());
+    }
+    let changed: Vec<Value> = messages
+        .iter()
+        .map(|(id, state)| {
+            let mut state = state.clone();
+            op.apply(&mut state);
+            json!({ "id": id, "labels": state.labels, "unread": state.unread, "starred": state.starred,
+                "snoozed_until": state.snoozed_until })
+        })
+        .collect();
+    sqlx::query(
+        "UPDATE messages SET labels = ARRAY(SELECT jsonb_array_elements_text(changed.labels)),
+             unread = changed.unread, starred = changed.starred,
+             snoozed_until = timestamptz 'epoch' + changed.snoozed_until * interval '1 millisecond',
+             rev = nextval('revs')
+         FROM jsonb_to_recordset($1)
+             AS changed(id UUID, labels JSONB, unread BOOLEAN, starred BOOLEAN, snoozed_until BIGINT)
+         WHERE messages.id = changed.id",
+    )
+    .bind(Json(changed))
+    .execute(&mut *tx.tx)
+    .await?;
+    let ids: Vec<Uuid> = messages.iter().map(|(id, _)| *id).collect();
+    sqlx::query(
+        "INSERT INTO provider_ops (account_id, message_id, op) SELECT account_id, id, $2 FROM messages WHERE id = ANY($1)",
+    )
+    .bind(&ids)
+    .bind(json!(without_ids(op)))
+    .execute(&mut *tx.tx)
+    .await?;
+    Ok(())
+}
+
+/// The op as the worker keeps it: one row per message, so the ids are left out.
+fn without_ids(op: &Op) -> Op {
+    let mut op = op.clone();
+    match &mut op {
+        Op::SetUnread { ids, .. }
+        | Op::SetStarred { ids, .. }
+        | Op::Archive { ids }
+        | Op::MoveToInbox { ids }
+        | Op::Trash { ids }
+        | Op::Spam { ids }
+        | Op::AddLabel { ids, .. }
+        | Op::RemoveLabel { ids, .. }
+        | Op::Snooze { ids, .. } => ids.clear(),
+        _ => {}
+    }
+    op
+}
+
+/// Snoozes a sent message until `at`, now if it was synced already, else once it is.
+pub async fn remind(db: &PgPool, account: &AccountRow, provider_id: &str, at: DateTime<Utc>) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, account.user_id).await?;
+    sqlx::query(
+        "INSERT INTO reminders (account_id, provider_id, remind_at) VALUES ($1, $2, $3)
+         ON CONFLICT (account_id, provider_id) DO UPDATE SET remind_at = excluded.remind_at",
+    )
+    .bind(account.id)
+    .bind(provider_id)
+    .bind(at)
+    .execute(&mut *tx.tx)
+    .await?;
+    apply_reminders(&mut tx, account.id).await?;
+    tx.commit().await
+}
+
+async fn apply_reminders(tx: &mut UserTx, account_id: Uuid) -> sqlx::Result<()> {
+    sqlx::query(
+        "WITH due AS (
+             DELETE FROM reminders USING messages
+             WHERE reminders.account_id = $1 AND messages.account_id = $1
+                 AND messages.provider_id = reminders.provider_id AND NOT messages.deleted
+             RETURNING messages.id, reminders.remind_at)
+         UPDATE messages SET snoozed_until = due.remind_at, rev = nextval('revs') FROM due WHERE messages.id = due.id",
+    )
+    .bind(account_id)
+    .execute(&mut *tx.tx)
+    .await?;
     Ok(())
 }
 
@@ -596,8 +790,7 @@ pub async fn save_body(
     .await?;
     let words: String = plain.chars().take(20_000).collect();
     sqlx::query(
-        "UPDATE messages SET search = to_tsvector('simple', subject || ' ' || coalesce(from_name, '') || ' ' || from_email
-             || ' ' || snippet || ' ' || $2)
+        "UPDATE messages SET search = message_search(from_name, from_email, recipients, subject, snippet || ' ' || $2)
          WHERE id = $1",
     )
     .bind(message.id)
@@ -614,6 +807,34 @@ pub async fn save_body(
     tx.commit().await
 }
 
+/// Rebuilds the search of the next `batch` messages synced before it was weighted. False once
+/// there are none left.
+pub async fn backfill_search(db: &PgPool, batch: i64) -> sqlx::Result<bool> {
+    let Some(after): Option<Uuid> = sqlx::query_scalar("SELECT after FROM search_backfill").fetch_optional(db).await?
+    else {
+        return Ok(false);
+    };
+    let last: Option<Uuid> = sqlx::query_scalar(
+        "WITH batch AS (SELECT id FROM messages WHERE id > $1 ORDER BY id LIMIT $2),
+         rebuilt AS (
+             UPDATE messages SET search = message_search(from_name, from_email, recipients, subject, snippet || ' '
+                 || coalesce((SELECT left(coalesce(text, regexp_replace(html, '<[^>]*>', ' ', 'g')), 20000)
+                     FROM bodies WHERE bodies.message_id = messages.id), ''))
+             FROM batch WHERE messages.id = batch.id RETURNING messages.id)
+         SELECT id FROM rebuilt ORDER BY id DESC LIMIT 1",
+    )
+    .bind(after)
+    .bind(batch)
+    .fetch_optional(db)
+    .await?;
+    let Some(last) = last else {
+        sqlx::query("DELETE FROM search_backfill").execute(db).await?;
+        return Ok(false);
+    };
+    sqlx::query("UPDATE search_backfill SET after = $1").bind(last).execute(db).await?;
+    Ok(true)
+}
+
 /// The newest inbox messages of the account that have no body yet.
 pub async fn missing_bodies(db: &PgPool, account_id: Uuid, newest: i64) -> sqlx::Result<Vec<MessageRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -627,13 +848,130 @@ pub async fn missing_bodies(db: &PgPool, account_id: Uuid, newest: i64) -> sqlx:
     .await
 }
 
-pub async fn search(db: &PgPool, user_id: Uuid, query: &str) -> sqlx::Result<Vec<Uuid>> {
-    sqlx::query_scalar(
-        "SELECT id FROM messages WHERE user_id = $1 AND NOT deleted AND search @@ websearch_to_tsquery('simple', $2)
-         ORDER BY date DESC LIMIT 200",
+// ---------- preferences and drafts ----------
+
+#[derive(sqlx::FromRow)]
+pub struct PreferenceRow {
+    pub key: String,
+    pub value: Value,
+    pub rev: i64,
+    pub deleted: bool,
+}
+
+impl PreferenceRow {
+    pub fn wire(self) -> Preference {
+        Preference { key: self.key, value: self.value, deleted: self.deleted, rev: self.rev }
+    }
+}
+
+/// Sets a preference, or removes it when `value` is None.
+pub async fn set_preference(db: &PgPool, user_id: Uuid, key: &str, value: Option<&Value>) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, user_id).await?;
+    sqlx::query(
+        "INSERT INTO preferences (user_id, key, value, deleted, rev) VALUES ($1, $2, $3, $4, nextval('revs'))
+         ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value, deleted = excluded.deleted, rev = excluded.rev",
     )
     .bind(user_id)
-    .bind(query)
-    .fetch_all(db)
-    .await
+    .bind(key)
+    .bind(value.cloned().unwrap_or(Value::Null))
+    .bind(value.is_none())
+    .execute(&mut *tx.tx)
+    .await?;
+    tx.commit().await
+}
+
+#[derive(sqlx::FromRow)]
+pub struct DraftRow {
+    pub id: String,
+    pub draft: Json<Draft>,
+    pub updated: DateTime<Utc>,
+    pub rev: i64,
+    pub deleted: bool,
+}
+
+impl DraftRow {
+    pub fn wire(self) -> SavedDraft {
+        SavedDraft {
+            id: self.id,
+            draft: self.draft.0,
+            updated: millis(self.updated),
+            deleted: self.deleted,
+            rev: self.rev,
+        }
+    }
+}
+
+pub async fn save_draft(db: &PgPool, user_id: Uuid, id: &str, draft: &Draft) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, user_id).await?;
+    sqlx::query(
+        "INSERT INTO drafts (id, user_id, draft, rev) VALUES ($1, $2, $3, nextval('revs'))
+         ON CONFLICT (user_id, id) DO UPDATE SET draft = excluded.draft, updated = now(), deleted = false, rev = excluded.rev",
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(Json(draft))
+    .execute(&mut *tx.tx)
+    .await?;
+    tx.commit().await
+}
+
+/// Leaves a tombstone with an empty draft.
+pub async fn delete_draft(db: &PgPool, user_id: Uuid, id: &str) -> sqlx::Result<()> {
+    let mut tx = UserTx::begin(db, user_id).await?;
+    sqlx::query(
+        "UPDATE drafts SET draft = $3, deleted = true, updated = now(), rev = nextval('revs')
+         WHERE user_id = $1 AND id = $2 AND NOT deleted",
+    )
+    .bind(user_id)
+    .bind(id)
+    .bind(Json(Draft::default()))
+    .execute(&mut *tx.tx)
+    .await?;
+    tx.commit().await
+}
+
+// ---------- uploads ----------
+
+#[derive(sqlx::FromRow)]
+pub struct UploadRow {
+    pub id: Uuid,
+    pub name: String,
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+pub async fn create_upload(db: &PgPool, user_id: Uuid, name: &str, mime: &str, bytes: &[u8]) -> sqlx::Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query("INSERT INTO uploads (id, user_id, name, mime, bytes) VALUES ($1, $2, $3, $4, $5)")
+        .bind(id)
+        .bind(user_id)
+        .bind(name)
+        .bind(mime)
+        .bind(bytes)
+        .execute(db)
+        .await?;
+    Ok(id)
+}
+
+/// The user's own uploads among `ids`; someone else's are left out.
+pub async fn uploads(db: &PgPool, user_id: Uuid, ids: &[Uuid]) -> sqlx::Result<Vec<UploadRow>> {
+    sqlx::query_as("SELECT id, name, mime, bytes FROM uploads WHERE user_id = $1 AND id = ANY($2)")
+        .bind(user_id)
+        .bind(ids)
+        .fetch_all(db)
+        .await
+}
+
+pub async fn owns_uploads(db: &PgPool, user_id: Uuid, ids: &[Uuid]) -> sqlx::Result<bool> {
+    let found: i64 = sqlx::query_scalar("SELECT count(*) FROM uploads WHERE user_id = $1 AND id = ANY($2)")
+        .bind(user_id)
+        .bind(ids)
+        .fetch_one(db)
+        .await?;
+    Ok(found as usize == ids.iter().collect::<HashSet<_>>().len())
+}
+
+pub async fn delete_uploads(db: &PgPool, user_id: Uuid, ids: &[Uuid]) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM uploads WHERE user_id = $1 AND id = ANY($2)").bind(user_id).bind(ids).execute(db).await?;
+    Ok(())
 }

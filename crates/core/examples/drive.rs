@@ -10,10 +10,11 @@
 //!   status | mailboxes | signout
 //!   threads [mailbox] [limit]            list a mailbox (inbox by default); rows get numbers
 //!   open <n> [images]                    open a thread
-//!   archive|trash|read|unread|star|unstar|inbox|spam <n>...
+//!   archive|trash|read|unread|star|unstar|inbox|spam|mute|unmute|block|unsubscribe <n>...
 //!   snooze <n> <minutes>
 //!   reply <n> | send <to> <subject> <text…> | cancel [op_id]   (sends wait 10 s to be undone)
 //!   search <words…>
+//!   undo | time <text…> | contacts <words…> | prefs
 //!   sleep <seconds>                      wait, for scripts
 //!   {"type": …}                          any command as JSON
 
@@ -75,7 +76,8 @@ fn main() {
             "threads" => json!({ "type": "threads", "mailbox": words.get(1).unwrap_or(&"inbox"),
                 "limit": words.get(2).and_then(|n| n.parse::<usize>().ok()).unwrap_or(20) }),
             "open" => json!({ "type": "open_thread", "thread": thread(1), "images": words.get(2) == Some(&"images") }),
-            "archive" | "trash" | "read" | "unread" | "star" | "unstar" | "inbox" | "spam" => {
+            "archive" | "trash" | "read" | "unread" | "star" | "unstar" | "inbox" | "spam" | "mute" | "unmute"
+            | "block" | "unsubscribe" => {
                 let threads: Vec<String> = (1..words.len().max(2)).map(thread).collect();
                 json!({ "type": "act", "action": first, "threads": threads })
             }
@@ -92,6 +94,10 @@ fn main() {
                 json!({ "type": "cancel_send", "op_id": words.get(1).map(|id| id.to_string()).unwrap_or_else(|| LAST_SEND.lock().unwrap().clone()) })
             }
             "search" => json!({ "type": "search", "query": words[1..].join(" ") }),
+            "undo" => json!({ "type": "undo" }),
+            "time" => json!({ "type": "parse_time", "text": words[1..].join(" ") }),
+            "contacts" => json!({ "type": "contacts", "query": words[1..].join(" ") }),
+            "prefs" => json!({ "type": "preferences" }),
             _ if line.trim_start().starts_with('{') => serde_json::from_str(&line).unwrap_or(Value::Null),
             _ => {
                 println!("unknown command: {first}");
@@ -160,9 +166,12 @@ fn print_event(event: &Event, rows: &Mutex<Vec<String>>) {
             }
             println!("#{id} {} {}", if *ok { "ok" } else { "error" }, value);
         }
-        Event::Changed { mailboxes, threads } => {
-            println!("· changed{} {} threads", if *mailboxes { " (mailboxes)" } else { "" }, threads.len())
-        }
+        Event::Changed { mailboxes, threads, preferences } => println!(
+            "· changed{}{} {} threads",
+            if *mailboxes { " (mailboxes)" } else { "" },
+            if *preferences { " (preferences)" } else { "" },
+            threads.len()
+        ),
         other => println!("· {}", serde_json::to_string(other).unwrap_or_default()),
     }
 }

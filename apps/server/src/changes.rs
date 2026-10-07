@@ -1,13 +1,13 @@
 //! What changed for a user after a cursor, read in one snapshot. A batch holds at most
-//! `BATCH_SIZE` messages; a full batch ends at its last message's rev, and the accounts and
-//! labels it carries end there too, so the next batch starts where this one stopped.
+//! `BATCH_SIZE` messages; a full batch ends at its last message's rev, and the accounts, labels,
+//! preferences and drafts it carries end there too, so the next batch starts where this one stopped.
 
 use mail_protocol::wire::ServerMessage;
 use mail_protocol::{Account, BATCH_SIZE, Label};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::db::{AccountRow, LabelRow, MESSAGE_COLUMNS, MessageRow};
+use crate::db::{ACCOUNT_COLUMNS, AccountRow, DraftRow, LabelRow, MESSAGE_COLUMNS, MessageRow, PreferenceRow};
 
 pub async fn read(db: &PgPool, user_id: Uuid, cursor: i64) -> sqlx::Result<ServerMessage> {
     let mut tx = db.begin().await?;
@@ -27,10 +27,9 @@ pub async fn read(db: &PgPool, user_id: Uuid, cursor: i64) -> sqlx::Result<Serve
         _ => i64::MAX,
     };
 
-    let accounts: Vec<AccountRow> = sqlx::query_as(
-        "SELECT id, user_id, provider, address, login, credentials, sync_state, status, color, rev, deleted
-         FROM accounts WHERE user_id = $1 AND rev > $2 AND rev <= $3 ORDER BY rev",
-    )
+    let accounts: Vec<AccountRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {ACCOUNT_COLUMNS} FROM accounts WHERE user_id = $1 AND rev > $2 AND rev <= $3 ORDER BY rev"
+    )))
     .bind(user_id)
     .bind(cursor)
     .bind(upper)
@@ -45,6 +44,22 @@ pub async fn read(db: &PgPool, user_id: Uuid, cursor: i64) -> sqlx::Result<Serve
     .bind(upper)
     .fetch_all(&mut *tx)
     .await?;
+    let preferences: Vec<PreferenceRow> = sqlx::query_as(
+        "SELECT key, value, rev, deleted FROM preferences WHERE user_id = $1 AND rev > $2 AND rev <= $3 ORDER BY rev",
+    )
+    .bind(user_id)
+    .bind(cursor)
+    .bind(upper)
+    .fetch_all(&mut *tx)
+    .await?;
+    let drafts: Vec<DraftRow> = sqlx::query_as(
+        "SELECT id, draft, updated, rev, deleted FROM drafts WHERE user_id = $1 AND rev > $2 AND rev <= $3 ORDER BY rev",
+    )
+    .bind(user_id)
+    .bind(cursor)
+    .bind(upper)
+    .fetch_all(&mut *tx)
+    .await?;
     tx.commit().await?;
 
     let highest = rows
@@ -52,6 +67,8 @@ pub async fn read(db: &PgPool, user_id: Uuid, cursor: i64) -> sqlx::Result<Serve
         .map(|row| row.rev)
         .chain(accounts.iter().map(|row| row.rev))
         .chain(labels.iter().map(|row| row.rev))
+        .chain(preferences.iter().map(|row| row.rev))
+        .chain(drafts.iter().map(|row| row.rev))
         .max()
         .unwrap_or(cursor);
     let accounts: Vec<Account> = accounts.iter().map(AccountRow::wire).collect();
@@ -60,6 +77,8 @@ pub async fn read(db: &PgPool, user_id: Uuid, cursor: i64) -> sqlx::Result<Serve
         accounts,
         labels,
         messages: rows.into_iter().map(MessageRow::wire).collect(),
+        preferences: preferences.into_iter().map(PreferenceRow::wire).collect(),
+        drafts: drafts.into_iter().map(DraftRow::wire).collect(),
         cursor: if full { upper } else { highest.max(cursor) },
         more: full,
     })

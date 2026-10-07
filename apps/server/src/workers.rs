@@ -1,8 +1,9 @@
-//! One task per account owns its provider connection. It sends the changes clients made, syncs,
-//! fetches the bodies of the newest inbox mail, and sleeps until it is woken (an op, a push from
-//! the provider) or it is time to poll again.
+//! One task per account owns its provider connection. It makes the labels created in the apps,
+//! sends the changes clients made, syncs, fetches the bodies of the newest inbox mail, and sleeps
+//! until it is woken (an op, a push from the provider) or it is time to poll again. Once a day it
+//! renews Gmail's push and reads the addresses the account sends as.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,11 +16,11 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::db::{self, AccountRow, MessageRow};
 use crate::mime;
-use crate::providers::{Batch, Connection, Reauth};
+use crate::providers::{Batch, Connection, Reauth, Refused};
 
 const PREFETCH: i64 = 100;
 const MAX_ATTEMPTS: i32 = 5;
-const WATCH_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+const DAILY: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Default)]
 pub struct Workers {
@@ -34,6 +35,9 @@ struct Running {
 
 impl Workers {
     pub async fn start_all(&self, state: &AppState) {
+        if !state.config.workers {
+            return;
+        }
         match db::live_account_ids(&state.db).await {
             Ok(ids) => ids.into_iter().for_each(|id| self.start(state, id)),
             Err(error) => tracing::error!("couldn't list the accounts to sync: {error}"),
@@ -127,15 +131,20 @@ async fn handle(state: &AppState, account: &AccountRow, error: &anyhow::Error) -
 }
 
 async fn work(state: &AppState, account_id: Uuid, connection: &Connection, wake: &Notify) -> anyhow::Result<()> {
-    let mut watched_at: Option<tokio::time::Instant> = None;
+    let mut daily_at: Option<tokio::time::Instant> = None;
     loop {
         let Some(account) = db::account(&state.db, account_id).await? else { return Ok(()) };
-        if watched_at.is_none_or(|at| at.elapsed() > WATCH_EVERY) {
+        if daily_at.is_none_or(|at| at.elapsed() > DAILY) {
             if let Err(error) = connection.watch(state).await {
                 tracing::warn!("couldn't watch {} for pushes: {error:#}", account.address);
             }
-            watched_at = Some(tokio::time::Instant::now());
+            match connection.identities().await {
+                Ok(identities) => db::set_identities(&state.db, &account, &identities).await?,
+                Err(error) => tracing::warn!("couldn't read who {} sends as: {error:#}", account.address),
+            }
+            daily_at = Some(tokio::time::Instant::now());
         }
+        create_labels(state, &account, connection).await?;
         flush_ops(state, &account, connection).await?;
         let synced = connection.sync(state, &account).await?;
         db::set_account_status(&state.db, &account, "ready").await?;
@@ -145,8 +154,30 @@ async fn work(state: &AppState, account_id: Uuid, connection: &Connection, wake:
     }
 }
 
+/// Makes the labels created in the apps at the provider, so the ops that use them can be sent.
+/// One the provider refuses for good (a name it has already) is deleted; any other failure is
+/// tried again on the next pass.
+pub(crate) async fn create_labels(
+    state: &AppState,
+    account: &AccountRow,
+    connection: &Connection,
+) -> anyhow::Result<()> {
+    let labels = db::labels(&state.db, account.id).await?;
+    for label in labels.iter().filter(|label| label.provider_id.is_none() && !label.deleted) {
+        match connection.create_label(&label.name).await {
+            Ok(provider_id) => db::set_label_provider_id(&state.db, label.id, &provider_id).await?,
+            Err(error) if error.is::<Refused>() => {
+                tracing::warn!("{} refused the label {:?}: {error:#}", account.address, label.name);
+                db::delete_label(&state.db, account, label.id).await?;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
 /// Sends the account's waiting changes in order, alike ones together.
-async fn flush_ops(state: &AppState, account: &AccountRow, connection: &Connection) -> anyhow::Result<()> {
+pub(crate) async fn flush_ops(state: &AppState, account: &AccountRow, connection: &Connection) -> anyhow::Result<()> {
     loop {
         let rows: Vec<(i64, serde_json::Value, String, i32)> = sqlx::query_as(
             "SELECT provider_ops.id, provider_ops.op, messages.provider_id, provider_ops.attempts
@@ -159,8 +190,14 @@ async fn flush_ops(state: &AppState, account: &AccountRow, connection: &Connecti
         if rows.is_empty() {
             return Ok(());
         }
+        let all = db::labels(&state.db, account.id).await?;
+        let waiting: HashSet<String> = all
+            .iter()
+            .filter(|label| label.provider_id.is_none() && !label.deleted)
+            .map(|label| label.id.to_string())
+            .collect();
         let labels: HashMap<Uuid, String> =
-            db::labels(&state.db, account.id).await?.into_iter().map(|label| (label.id, label.provider_id)).collect();
+            all.into_iter().filter_map(|label| Some((label.id, label.provider_id?))).collect();
         let mut index = 0;
         while index < rows.len() {
             let same: Vec<_> = rows[index..].iter().take_while(|row| row.1 == rows[index].1).collect();
@@ -170,6 +207,14 @@ async fn flush_ops(state: &AppState, account: &AccountRow, connection: &Connecti
                 delete_ops(state, &ids).await?;
                 continue;
             };
+            // A label made in the apps since the last pass is made at the provider first, then
+            // the ops are read again.
+            if let Op::AddLabel { label, .. } | Op::RemoveLabel { label, .. } = &op
+                && waiting.contains(label)
+            {
+                create_labels(state, account, connection).await?;
+                break;
+            }
             let batch = Batch { op, provider_ids: same.iter().map(|row| row.2.clone()).collect() };
             match connection.apply(&batch, &labels).await {
                 Ok(()) => delete_ops(state, &ids).await?,
@@ -207,6 +252,15 @@ async fn prefetch(state: &AppState, account: &AccountRow, connection: &Connectio
             }
         })
         .await;
+}
+
+/// A message's raw MIME, from its account's provider.
+pub async fn raw_message(state: &AppState, message: &MessageRow) -> anyhow::Result<Vec<u8>> {
+    let Some(account) = db::account(&state.db, message.account_id).await? else {
+        anyhow::bail!("the account was removed");
+    };
+    let connection = state.workers.connect(state, &account).await?;
+    connection.raw(&message.provider_id).await
 }
 
 pub async fn fetch_body(

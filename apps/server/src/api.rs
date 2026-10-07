@@ -1,10 +1,16 @@
 //! What the apps call over HTTP. A signed-in app sends its session's `Bearer` token.
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use mail_protocol::Provider;
-use mail_protocol::api::{DevLoginRequest, ExchangeRequest, JmapAccountRequest, LinkTicket, TokenResponse};
+use mail_protocol::api::{
+    DevLoginRequest, ExchangeRequest, JmapAccountRequest, LinkTicket, TokenResponse, UploadResponse,
+};
+use percent_encoding::{NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -12,7 +18,10 @@ use crate::db::NewAccount;
 use crate::error::{AppError, AppResult};
 use crate::providers::Reauth;
 use crate::providers::jmap::{Jmap, Login};
-use crate::{AppState, db, random_token, sha256_hex};
+use crate::{AppState, db, mime, random_token, sha256_hex, workers};
+
+/// The largest file `POST /api/uploads` takes.
+pub const UPLOAD_LIMIT: usize = 25 * 1024 * 1024;
 
 fn bearer(headers: &HeaderMap) -> Option<&str> {
     headers.get("authorization")?.to_str().ok()?.strip_prefix("Bearer ")
@@ -26,6 +35,10 @@ async fn signed_in(state: &AppState, headers: &HeaderMap) -> AppResult<Option<Uu
     let Some(token) = bearer(headers) else { return Ok(None) };
     let user = user_of_token(state, token).await?;
     user.map(Some).ok_or_else(|| AppError::unauthorized("This session has ended. Sign in again."))
+}
+
+async fn user(state: &AppState, headers: &HeaderMap) -> AppResult<Uuid> {
+    signed_in(state, headers).await?.ok_or_else(|| AppError::unauthorized("Sign in first."))
 }
 
 async fn new_session(state: &AppState, user_id: Uuid) -> AppResult<Json<TokenResponse>> {
@@ -48,7 +61,7 @@ pub async fn exchange(
 }
 
 pub async fn link_ticket(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<LinkTicket>> {
-    let user_id = signed_in(&state, &headers).await?.ok_or_else(|| AppError::unauthorized("Sign in first."))?;
+    let user_id = user(&state, &headers).await?;
     let ticket = random_token();
     db::create_link_ticket(&state.db, user_id, &sha256_hex(ticket.as_bytes())).await?;
     Ok(Json(LinkTicket { ticket }))
@@ -105,6 +118,56 @@ pub async fn dev_login(
     }
     let user_id = db::create_user(&state.db).await?;
     new_session(&state, user_id).await
+}
+
+/// One of a message's attachments, by its place in the message's list, fetched from the provider.
+pub async fn attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, index)): Path<(Uuid, usize)>,
+) -> AppResult<Response> {
+    let user_id = user(&state, &headers).await?;
+    let message = db::message(&state.db, user_id, id).await?.filter(|message| !message.deleted);
+    let Some(message) = message else {
+        return Err(AppError::not_found());
+    };
+    let raw = workers::raw_message(&state, &message).await.map_err(|error| {
+        tracing::warn!("couldn't fetch a message for its attachment: {error:#}");
+        AppError::new(StatusCode::BAD_GATEWAY, "The attachment couldn't be fetched. Try again.")
+    })?;
+    let Some(file) = mime::files(&raw).into_iter().nth(index) else {
+        return Err(AppError::not_found());
+    };
+    let disposition = content_disposition(&file.name);
+    Ok(([(CONTENT_TYPE, file.mime), (CONTENT_DISPOSITION, disposition)], file.bytes).into_response())
+}
+
+/// `attachment` with the name as ASCII and, for any other characters, as RFC 5987 UTF-8.
+fn content_disposition(name: &str) -> String {
+    let ascii: String = name
+        .chars()
+        .map(|character| match character {
+            ' '..='~' if character != '"' && character != '\\' => character,
+            _ => '_',
+        })
+        .collect();
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{}", utf8_percent_encode(name, NON_ALPHANUMERIC))
+}
+
+/// A file for a draft to send. The body is the file; `x-file-name` its name, percent-encoded.
+pub async fn upload(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> AppResult<Json<UploadResponse>> {
+    let user_id = user(&state, &headers).await?;
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
+    let name = percent_decode_str(header("x-file-name")).decode_utf8_lossy().trim().to_string();
+    let name = name.rsplit(['/', '\\']).next().unwrap_or_default().chars().take(255).collect::<String>();
+    let name = if name.is_empty() { "Attachment".to_string() } else { name };
+    let mime = header("content-type").split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    let mime = match mime.split_once('/') {
+        Some((kind, subtype)) if !kind.is_empty() && !subtype.is_empty() => mime,
+        _ => "application/octet-stream".to_string(),
+    };
+    let id = db::create_upload(&state.db, user_id, &name, &mime, &body).await?;
+    Ok(Json(UploadResponse { id: id.to_string() }))
 }
 
 /// Gmail's Pub/Sub push: `{message: {data: base64({emailAddress, historyId})}}`.

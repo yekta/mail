@@ -34,3 +34,10 @@ pub struct DevLoginRequest {
 pub struct ErrorResponse {
     pub error: String,
 }
+
+/// The answer to `POST /api/uploads`, whose body is the file. Its name comes in `x-file-name`
+/// (percent-encoded) and its type in `content-type`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadResponse {
+    pub id: String,
+}
