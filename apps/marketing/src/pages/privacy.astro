@@ -1,6 +1,6 @@
 ---
 import Article from "@/layouts/article.astro"
-import { GITHUB_URL, PRIVACY_EMAIL } from "@/lib/links"
+import { CONTACT_EMAIL, GITHUB_URL } from "@/lib/links"
 
 const USER_DATA_POLICY_URL =
   "https://developers.google.com/terms/api-services-user-data-policy"
@@ -76,7 +76,7 @@ const USER_DATA_POLICY_URL =
   <p>
     Removing an account in the apps forgets its credentials and the bodies of
     its mail at once, and stops syncing it. To have everything of yours deleted,
-    write to <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>. You can
+    write to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. You can
     check all of this in the <a href={GITHUB_URL}>source</a>.
   </p>
 </Article>

@@ -1,6 +1,6 @@
 ---
 import Article from "@/layouts/article.astro"
-import { GITHUB_URL } from "@/lib/links"
+import { CONTACT_EMAIL, GITHUB_URL } from "@/lib/links"
 
 const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`
 ---
@@ -36,5 +36,10 @@ const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`
   <p>
     We may change the service or these terms. If a change matters, we will say
     so on this page.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Write to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
   </p>
 </Article>
