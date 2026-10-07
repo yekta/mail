@@ -1,0 +1,82 @@
+---
+import Article from "@/layouts/article.astro"
+import { GITHUB_URL, PRIVACY_EMAIL } from "@/lib/links"
+
+const USER_DATA_POLICY_URL =
+  "https://developers.google.com/terms/api-services-user-data-policy"
+---
+
+<Article title="Privacy">
+  <p>
+    Wonnet keeps a copy of your mail on your devices and syncs it through a
+    server. The apps start on our server; this page says what it stores and why.
+    If you run your own server, we see nothing at all.
+  </p>
+
+  <h2>What we store</h2>
+  <ul>
+    <li>
+      <strong>Your mail accounts:</strong> their addresses and providers, and
+      what the server needs to reach them: a Gmail refresh token, or a JMAP
+      server's address, username and password. Credentials are sealed with
+      AES-GCM before they are stored.
+    </li>
+    <li>
+      <strong>Your mail:</strong> for each message its sender, recipients,
+      subject, date, labels and the names and sizes of its attachments, and the
+      bodies of the messages the server has fetched. This is what lets the apps
+      sync, search and snooze, and send mail later.
+    </li>
+    <li>
+      <strong>Mail waiting to be sent:</strong> a message you sent with undo
+      send or send later stays on the server until it goes out, and for seven
+      days after.
+    </li>
+    <li>
+      <strong>Your sessions:</strong> each signed-in device has a token. We
+      store only its hash. Sign-in codes and links to add another account are
+      stored as hashes and expire within minutes.
+    </li>
+  </ul>
+
+  <h2>What we don't</h2>
+  <ul>
+    <li>
+      <strong>Your attachments' contents.</strong> We keep their names and sizes
+      only. Small images shown inside a message are kept as part of its body.
+    </li>
+    <li>
+      <strong>What you read and when.</strong> The site and the apps have no
+      analytics and set no tracking cookies.
+    </li>
+    <li>
+      <strong>Remote images.</strong> Images in a message stay blocked until you
+      ask for them, so senders can't tell that you opened it.
+    </li>
+  </ul>
+
+  <h2>How we use it</h2>
+  <p>
+    Only to show you your mail and to carry out what you do in the apps:
+    archiving, labelling, sending, snoozing. We don't sell it, share it, use it
+    for advertising or to train models, and no person reads it unless you ask us
+    to for support.
+  </p>
+
+  <h2>Google user data</h2>
+  <p>
+    A Gmail account gives Wonnet access to your email address and to read,
+    change and send your mail. Wonnet's use and transfer of information received
+    from Google APIs adheres to the{" "}
+    <a href={USER_DATA_POLICY_URL}>Google API Services User Data Policy</a>,
+    including the Limited Use requirements.
+  </p>
+
+  <h2>Deleting it</h2>
+  <p>
+    Removing an account in the apps forgets its credentials and the bodies of
+    its mail at once, and stops syncing it. To have everything of yours deleted,
+    write to <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>. You can
+    check all of this in the <a href={GITHUB_URL}>source</a>.
+  </p>
+</Article>

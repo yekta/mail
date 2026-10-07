@@ -1,6 +1,6 @@
 ## What is this?
 
-Mail is an email client that feels instant. Every action in the apps reads and writes a local
+Wonnet is an email client that feels instant. Every action in the apps reads and writes a local
 SQLite copy of the mail; the network only syncs in the background. A server of ours syncs with
 the mail providers (Gmail, and JMAP servers such as Fastmail and Stalwart) and keeps the apps'
 copies current over a WebSocket. Its look is the old Newton Mail's (CloudMagic, 2016–2020):
@@ -15,16 +15,18 @@ These programs make it up, plus the code the apps share:
 | iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
 | Apple kit (`packages/apple`, `MailUI`) | Inside the Mac and the iOS app | Their state and their views |
 | Core (`crates/core`) | Inside every app | The local copy, the link to the server, rendering rows, pages and drafts |
+| Marketing site (`apps/marketing`) | wonnet.app | The home page, privacy and terms |
 
 The first mail account added makes the user; later accounts join that user with a one-time link
 ticket. The server keeps each account's credentials sealed (AES-GCM with `SECRET_KEY`) and
 session tokens hashed. README.md covers how to set things up.
 
-Production is the `Mail` project on Unbind:
+Production is the `Wonnet` project on Unbind:
 
 | Service | Address | What it runs |
 | --- | --- | --- |
 | `Server` | https://server-w7vzr5ga782d.unbind.yekta.cc | The server, built from `Dockerfile` on every push to `main` that touches it |
+| `Marketing` | https://wonnet.app | The marketing site, built from `apps/marketing/Dockerfile` on every push to `main` that touches it |
 | `Postgres` | | The server's database |
 
 The server runs one replica: an account's worker must run in one place. Gmail needs
@@ -117,6 +119,13 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 - `iOS/`: `MailIOSApp.swift` (the navigation stack) and `ThreadListIOS.swift` (a `UITableView`
   with the swipes).
 
+### apps/marketing (Astro, Tailwind)
+
+wonnet.app: `src/pages` has the home page, `privacy.astro` and `terms.astro`. Black and white in
+DM Sans, following the system's appearance; its colours are in `src/styles/global.css`, apart
+from the apps' tokens. The screenshots come from `docs/screenshots`. It is served as static
+files by static-web-server (`server.toml`).
+
 ### apps/macos and apps/ios
 
 - `apps/macos`: a SwiftPM executable and `scripts/build-app.sh`, which builds the core and the
@@ -153,13 +162,14 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 
 ## Development
 
-Needs Rust stable, Docker (for Postgres and Stalwart) and Node 24. The apps need a Mac with
+Needs Rust stable, Docker (for Postgres and Stalwart), Node 24 and pnpm. The apps need a Mac with
 Xcode; the iOS app also XcodeGen and `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
 
     docker compose up -d                          # Postgres on 5441, Stalwart on 8441
     cargo run -p mail-server -- seed              # demo@example.com with a few hundred messages
     cargo run -p mail-server                      # with the variables of .env.example exported
     cargo run -p mail-core --example drive        # the core, driven from a terminal
+    cd apps/marketing && pnpm install && pnpm dev # the marketing site
     apps/macos/scripts/build-app.sh --open        # the Mac app
     open apps/macos/build/Mail.app --args --demo  # the Mac app with made-up mail, no server
     cd apps/ios && xcodegen generate && open Mail.xcodeproj
@@ -170,6 +180,7 @@ the Stalwart test runs when `STALWART_URL` is set):
     export DATABASE_URL=postgres://mail:mail@localhost:5441/mail STALWART_URL=http://localhost:8441
     cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
     node packages/theme/build.mjs --check
+    cd apps/marketing && pnpm check && pnpm build
 
 The `macOS` and `iOS` workflows only run when the apps, the Apple kit, the theme or the crates
 change: macOS runners cost ten times as much on a private repository.
@@ -183,9 +194,9 @@ sentence describing the change:
     core: Fold quoted text in plain text mail
     core | apple: Show when a send failed
 
-The parts are the folders in `apps`, `crates` and `packages`: `server`, `macos`, `ios`, `core`,
-`protocol`, `apple` and `theme`. Use `ci` for the workflows and `docs` for README.md and
-AGENTS.md.
+The parts are the folders in `apps`, `crates` and `packages`: `server`, `marketing`, `macos`,
+`ios`, `core`, `protocol`, `apple` and `theme`. Use `ci` for the workflows and `docs` for README.md
+and AGENTS.md.
 
 The title should be concise. The description explains the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.

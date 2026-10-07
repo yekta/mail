@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@import "@fontsource-variable/dm-sans";
+
+/* Black and white, following the system's appearance. */
+@theme {
+  --font-sans: "DM Sans Variable", sans-serif;
+  --color-background: #fff;
+  --color-foreground: #000;
+  --color-muted: #f2f2f2;
+  --color-muted-foreground: #6b6b6b;
+  --color-border: #e6e6e6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #000;
+    --color-foreground: #fff;
+    --color-muted: #1a1a1a;
+    --color-muted-foreground: #999;
+    --color-border: #262626;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  * {
+    @apply border-border;
+  }
+}
+
+@layer components {
+  .article {
+    @apply text-muted-foreground;
+  }
+  .article h1 {
+    @apply text-3xl font-medium tracking-tight text-foreground;
+  }
+  .article h2 {
+    @apply mt-10 text-lg font-medium tracking-tight text-foreground;
+  }
+  .article p,
+  .article ul {
+    @apply mt-4 leading-relaxed;
+  }
+  .article ul {
+    @apply flex list-disc flex-col gap-2 pl-5;
+  }
+  .article strong {
+    @apply font-medium text-foreground;
+  }
+  .article a {
+    @apply text-foreground underline underline-offset-4;
+  }
+}

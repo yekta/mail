@@ -1,0 +1,76 @@
+---
+import "@/styles/global.css"
+import { getImage } from "astro:assets"
+import inbox from "../../../../docs/screenshots/mac-inbox.png"
+import Logo from "@/components/logo.astro"
+import LinkButton from "@/components/link-button.astro"
+import { DESCRIPTION, GITHUB_URL, TAGLINE } from "@/lib/links"
+
+interface Props {
+  title?: string
+  description?: string
+}
+
+const { title, description = DESCRIPTION } = Astro.props
+const fullTitle = title ? `${title} · Wonnet` : `Wonnet · ${TAGLINE}`
+const preview = await getImage({ src: inbox, width: 1200, format: "png" })
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="theme-color"
+      content="#fff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#000"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content={new URL(preview.src, Astro.site)} />
+    <meta property="og:image:alt" content="The Wonnet inbox on the Mac" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body class="flex min-h-svh flex-col">
+    <header class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
+      <LinkButton
+        href="/"
+        variant="ghost"
+        class="-ml-3 text-base tracking-tight text-foreground"
+      >
+        <Logo />
+        Wonnet
+      </LinkButton>
+      <LinkButton href={GITHUB_URL} variant="ghost" class="-mr-3">
+        GitHub
+      </LinkButton>
+    </header>
+    <div class="flex-1">
+      <slot />
+    </div>
+    <footer class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-1 border-t px-4 py-4">
+      <span class="mr-auto text-sm text-muted-foreground">Wonnet</span>
+      <LinkButton href="/privacy/" variant="ghost" size="sm">
+        Privacy
+      </LinkButton>
+      <LinkButton href="/terms/" variant="ghost" size="sm">
+        Terms
+      </LinkButton>
+      <LinkButton href={GITHUB_URL} variant="ghost" size="sm" class="-mr-3">
+        GitHub
+      </LinkButton>
+    </footer>
+  </body>
+</html>

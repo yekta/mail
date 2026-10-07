@@ -1,6 +1,6 @@
-# Mail
+# Wonnet
 
-An email client that feels instant, for the Mac and iOS. Its look is the old Newton Mail's: calm, plain, nothing that isn't needed. Open source, under the MIT license.
+An email client that feels instant, for the Mac and iOS. Its look is the old Newton Mail's: calm, plain, nothing that isn't needed. Open source, under the MIT license. [wonnet.app](https://wonnet.app)
 
 ![The inbox on the Mac](docs/screenshots/mac-inbox.png)
 

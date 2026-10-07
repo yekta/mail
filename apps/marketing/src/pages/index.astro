@@ -1,0 +1,111 @@
+---
+import { getImage } from "astro:assets"
+import {
+  KeyboardIcon,
+  LayersIcon,
+  ShieldCheckIcon,
+  ZapIcon,
+} from "@lucide/astro"
+import inbox from "../../../../docs/screenshots/mac-inbox.png"
+import inboxDark from "../../../../docs/screenshots/mac-dark.png"
+import Layout from "@/layouts/main.astro"
+import GithubIcon from "@/components/github-icon.astro"
+import LinkButton from "@/components/link-button.astro"
+import {
+  DESCRIPTION,
+  GETTING_STARTED_URL,
+  GITHUB_URL,
+  TAGLINE,
+} from "@/lib/links"
+
+const widths = [600, 1200, 1800]
+const sizes = "(min-width: 1200px) 1152px, 100vw"
+const light = await getImage({ src: inbox, widths, sizes })
+const dark = await getImage({ src: inboxDark, widths, sizes })
+
+const features = [
+  {
+    icon: ZapIcon,
+    title: "Nothing waits",
+    text: "Your mail lives on your device. Opening, archiving and searching happen at once, and a server syncs with your provider in the background.",
+  },
+  {
+    icon: LayersIcon,
+    title: "Gmail and JMAP",
+    text: "Gmail, Fastmail and any JMAP server in one unified inbox, with a colour for each account.",
+  },
+  {
+    icon: KeyboardIcon,
+    title: "Newton's habits",
+    text: "Snooze, undo send and send later. On the Mac, single keys: j and k to move, e to archive, r to reply.",
+  },
+  {
+    icon: ShieldCheckIcon,
+    title: "Private by default",
+    text: "Remote images stay blocked until you ask for them, and every message is sanitized before it is drawn.",
+  },
+]
+---
+
+<Layout>
+  <main class="pb-24">
+    <section class="mx-auto flex max-w-5xl flex-col items-center px-6 pt-10 text-center sm:pt-14">
+      <h1 class="max-w-[16ch] text-4xl leading-[1.05] font-medium tracking-tight text-balance sm:text-6xl">
+        {TAGLINE}
+      </h1>
+      <p class="mt-5 max-w-md text-lg text-pretty text-muted-foreground">
+        {DESCRIPTION}
+      </p>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <LinkButton href={GITHUB_URL} size="lg">
+          <GithubIcon />
+          View the source
+        </LinkButton>
+        <LinkButton href={GETTING_STARTED_URL} size="lg" variant="outline">
+          Run it yourself
+        </LinkButton>
+      </div>
+    </section>
+
+    <section class="mx-auto mt-12 max-w-6xl px-3 sm:mt-16 sm:px-6">
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcset={dark.srcSet.attribute}
+          sizes={sizes}
+        />
+        <img
+          src={light.src}
+          srcset={light.srcSet.attribute}
+          sizes={sizes}
+          width={inbox.width}
+          height={inbox.height}
+          alt="The Wonnet inbox on the Mac"
+          class="h-auto w-full drop-shadow-[0_0_1px_rgb(0_0_0/0.35)] dark:drop-shadow-[0_0_1px_rgb(255_255_255/0.4)]"
+        />
+      </picture>
+    </section>
+
+    <section class="mx-auto mt-20 grid max-w-5xl gap-10 px-6 sm:mt-28 sm:grid-cols-2 lg:grid-cols-4">
+      {features.map((feature) => (
+        <div>
+          <feature.icon class="size-5" />
+          <h2 class="mt-4 font-medium">{feature.title}</h2>
+          <p class="mt-1.5 text-pretty text-muted-foreground">{feature.text}</p>
+        </div>
+      ))}
+    </section>
+
+    <section class="mx-auto mt-20 flex max-w-5xl flex-col items-center px-6 text-center sm:mt-28">
+      <h2 class="text-2xl font-medium tracking-tight">Open source</h2>
+      <p class="mt-3 max-w-md text-pretty text-muted-foreground">
+        Wonnet is MIT licensed. The apps start on our server, and you can run
+        your own with Postgres and a single binary.
+      </p>
+      <LinkButton href={GITHUB_URL} variant="outline" class="mt-6">
+        <GithubIcon />
+        yekta/wonnet
+      </LinkButton>
+    </section>
+  </main>
+</Layout>

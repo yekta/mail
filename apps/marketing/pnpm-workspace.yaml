@@ -1,0 +1,5 @@
+# pnpm's default, stated so a machine with a looser setting resolves what CI and Docker accept.
+minimumReleaseAge: 1440
+allowBuilds:
+  esbuild: true
+  sharp: true

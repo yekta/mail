@@ -54,3 +54,24 @@ jobs:
           node-version: 24
       - name: The generated tokens are up to date
         run: node packages/theme/build.mjs --check
+
+  marketing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/marketing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/marketing/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/marketing/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prettier --check .
+      - run: pnpm check
+      - run: pnpm build
