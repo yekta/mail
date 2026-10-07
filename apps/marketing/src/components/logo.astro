@@ -6,17 +6,10 @@ interface Props {
 const { class: className } = Astro.props
 ---
 
-<svg viewBox="0 0 32 32" class:list={["size-5", className]} aria-hidden="true">
-  <rect width="32" height="32" rx="7.5" class="fill-foreground"></rect>
-  <g
-    transform="translate(5.2 5.6) scale(0.9)"
-    fill="none"
-    stroke-width="2.2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class="stroke-background"
-  >
-    <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
-    <path d="m21.854 2.147-10.94 10.939"></path>
-  </g>
+<svg
+  viewBox="0 0 24 24"
+  class:list={["size-4.5 fill-current", className]}
+  aria-hidden="true"
+>
+  <path d="M17.47 14.216l2.71-10.727H24l-4.55 16.715h-3.843l-3.56-11.08-3.583 11.08H4.55L0 3.49h3.96l2.76 10.703L10.184 3.49h3.819l3.466 10.727z"></path>
 </svg>

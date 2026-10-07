@@ -123,14 +123,15 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 
 wonnet.app: `src/pages` has the home page, `privacy.astro` and `terms.astro`. Black and white in
 DM Sans, following the system's appearance; its colours are in `src/styles/global.css`, apart
-from the apps' tokens. The screenshots come from `docs/screenshots`. It is served as static
-files by static-web-server (`server.toml`).
+from the apps' tokens. The screenshots come from `docs/screenshots`; the favicons are drawn by
+`scripts/icons.mjs` (`pnpm icons`). It is served as static files by static-web-server
+(`server.toml`).
 
 ### apps/macos and apps/ios
 
 - `apps/macos`: a SwiftPM executable and `scripts/build-app.sh`, which builds the core and the
-  app into `build/Mail.app`. `Resources/AppIcon.png` is the icon of both apps
-  (`scripts/make-icon.swift`).
+  app into `build/Mail.app`. `Resources/AppIcon.icon` is the icon of both apps, made in Icon
+  Composer: the W in black on a light tile, white on a dark one in dark mode.
 - `apps/ios`: `project.yml` for XcodeGen; the Xcode project is generated, never committed.
   `scripts/build-core.sh` builds the core for the platform Xcode builds for.
 
