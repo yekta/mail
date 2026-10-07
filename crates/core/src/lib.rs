@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod core;
+mod demo;
 pub mod ffi;
 mod http;
 mod link;

@@ -39,7 +39,7 @@ fn main() {
     let sink = Arc::new(move |event: Event| print_event(&event, &seen));
     let handle = {
         let _guard = runtime.enter();
-        mail_core::core::start(Config { data_dir: data.clone(), server_url: Some(server.clone()) }, sink)
+        mail_core::core::start(Config { data_dir: data.clone(), server_url: Some(server.clone()), demo: false }, sink)
             .expect("the core starts")
     };
     println!("core at {data}, server {server}. Type a command.");

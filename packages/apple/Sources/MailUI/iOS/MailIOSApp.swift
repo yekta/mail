@@ -43,7 +43,6 @@ struct IOSRoot: View {
                         .navigationTitle("Mailboxes")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(Tokens.sidebar.color, for: .navigationBar)
-                        .toolbarColorScheme(.dark, for: .navigationBar)
                         .navigationDestination(for: Route.self) { route in
                             switch route {
                             case .mailbox(let id): MailboxScreen(mailbox: id, path: $path)

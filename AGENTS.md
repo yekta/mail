@@ -84,6 +84,8 @@ events out through the callback given to `mail_core_start`) and a Rust library f
   pages, remote images blocked, designed mail on a light paper card), `text.rs` (plain text with
   links and folded quotes), `drafts.rs` (reply, reply all, forward).
 - `api.rs`: the JSON the apps and the core exchange.
+- `demo.rs`: made-up mail. With `demo` in its config (the apps' `--demo`) the core shows it and
+  never connects.
 - `examples/drive.rs` drives the core from a terminal.
 
 ### packages/theme
@@ -159,6 +161,7 @@ Xcode; the iOS app also XcodeGen and `rustup target add aarch64-apple-ios aarch6
     cargo run -p mail-server                      # with the variables of .env.example exported
     cargo run -p mail-core --example drive        # the core, driven from a terminal
     apps/macos/scripts/build-app.sh --open        # the Mac app
+    open apps/macos/build/Mail.app --args --demo  # the Mac app with made-up mail, no server
     cd apps/ios && xcodegen generate && open Mail.xcodeproj
 
 Checks (`cargo test` needs the compose services; it makes a throwaway database per test, and

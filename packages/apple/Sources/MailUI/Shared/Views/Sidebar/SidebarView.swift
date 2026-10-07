@@ -1,7 +1,6 @@
 import SwiftUI
 
 /// The mailboxes of every account together, then each account with its colour, then settings.
-/// Charcoal in both appearances, as Newton's drawer was.
 struct SidebarView: View {
     @Environment(MailStore.self) private var store
     @State private var expanded: Set<String> = []
@@ -38,7 +37,6 @@ struct SidebarView: View {
             footer
         }
         .background(Tokens.sidebar.color)
-        .environment(\.colorScheme, .dark)
     }
 
     private func row(_ mailbox: Mailbox, symbol: Symbol, indent: CGFloat = 0) -> some View {

@@ -25,7 +25,8 @@ impl Driver {
         let data = tempfile::tempdir().unwrap();
         let events: Arc<Mutex<Vec<Event>>> = Arc::default();
         let sink = events.clone();
-        let config = Config { data_dir: data.path().display().to_string(), server_url: Some(server.to_string()) };
+        let config =
+            Config { data_dir: data.path().display().to_string(), server_url: Some(server.to_string()), demo: false };
         let handle = mail_core::core::start(config, Arc::new(move |event| sink.lock().unwrap().push(event))).unwrap();
         Self { handle, events, next: 0, _data: data }
     }

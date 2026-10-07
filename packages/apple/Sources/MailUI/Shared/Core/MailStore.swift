@@ -108,8 +108,10 @@ public final class MailStore {
         guard !started else { return }
         started = true
         bridge.onEvent = { [weak self] event in self?.handle(event) }
-        try? FileManager.default.createDirectory(at: Platform.dataFolder, withIntermediateDirectories: true)
-        let config: [String: Any] = ["data_dir": Platform.dataFolder.path, "server_url": defaultServer]
+        let demo = ProcessInfo.processInfo.arguments.contains("--demo")
+        let folder = demo ? Platform.dataFolder.appendingPathComponent("Demo", isDirectory: true) : Platform.dataFolder
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let config: [String: Any] = ["data_dir": folder.path, "server_url": defaultServer, "demo": demo]
         guard bridge.start(config: config) else {
             show("The mail store couldn't open.")
             return

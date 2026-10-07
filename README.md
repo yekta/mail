@@ -76,6 +76,8 @@ cd apps/ios && xcodegen generate && open Mail.xcodeproj
 
 Xcode builds the core for the iOS app itself. Set your team under Signing to run it on a device, and `MAIL_SERVER_URL` in `project.yml` for another server.
 
+To look at the apps without a server or an account, start them with `--demo`: they show made-up mail, kept apart from your own and made fresh at every start. On the Mac, `open apps/macos/build/Mail.app --args --demo`; on iOS, add `--demo` to the scheme's arguments in Xcode.
+
 ### 4. Add an account
 
 Open the app and choose **Continue with Google**, or add a JMAP server with its address, your email and a password (for Fastmail, an app password and `https://api.fastmail.com`). The first account makes your user; accounts added later in Settings join it.
