@@ -167,6 +167,22 @@ async fn sent_mail_with_a_reminder_comes_back_to_the_inbox(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_send_waits_out_a_spent_gmail_quota(db: PgPool) {
+    let server = Server::start(db.clone()).await;
+    let (_, _, account) = server.gmail_user("ann@gmail.com").await;
+    server.refuse_sends(1);
+    let draft = Draft {
+        account_id: account.id.to_string(),
+        to: vec![Address::new(None, "cy@example.com")],
+        subject: "Lunch".into(),
+        text: "Noon?".into(),
+        ..Default::default()
+    };
+    crate::scheduler::deliver(&server.state, &account, &draft).await.unwrap();
+    assert_eq!(server.sent().len(), 1);
+}
+
+#[sqlx::test]
 async fn uploads_a_waiting_send_or_a_saved_draft_uses_outlive_the_week(db: PgPool) {
     let server = Server::start(db.clone()).await;
     let (ann, ann_id, account) = server.gmail_user("ann@gmail.com").await;

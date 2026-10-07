@@ -95,19 +95,30 @@ struct MacRoot: View {
                     ThreadScreen(conversation: conversation)
                 } else if store.visibleRows.isEmpty, store.splits.isEmpty, store.filter == nil {
                     EmptyList()
-                } else {
+                } else if store.visibleRows.isEmpty {
                     VStack(spacing: 0) {
                         ListHeader()
-                        if store.visibleRows.isEmpty {
-                            EmptyList().frame(maxHeight: .infinity)
-                        } else {
-                            ThreadListMac(store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection)
-                        }
+                        EmptyList().frame(maxHeight: .infinity)
                     }
                     .frame(maxWidth: Theme.cardWidth)
                     .background(Tokens.card.color)
                     .padding(.top, 16)
                     .padding(.horizontal, 24)
+                } else {
+                    // The list scrolls the whole page; only its header stays put above it.
+                    let header = ListHeader.shows(store)
+                    VStack(spacing: 0) {
+                        if header {
+                            ListHeader()
+                                .frame(maxWidth: Theme.cardWidth)
+                                .padding(.top, 16)
+                                .padding(.horizontal, 24)
+                        }
+                        ThreadListMac(
+                            store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
+                            topInset: header ? 0 : 16
+                        )
+                    }
                 }
             }
         }

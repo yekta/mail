@@ -3,11 +3,11 @@ import SwiftUI
 
 /// A thread: its subject, its labels, who is in it, and its messages stacked as cards; the
 /// earlier ones folded to a line, as Newton showed them. It opens on the first unread message.
-/// On a wide Mac window the person it is with is shown beside it.
+/// On a wide Mac window a sender clicked is shown beside it.
 struct ThreadScreen: View {
     @Environment(MailStore.self) private var store
     let conversation: Conversation
-    /// A sender clicked, shown in the pane instead of the thread's person.
+    /// A sender clicked, shown in the pane beside the thread.
     @State private var paneEmail: String?
     @State private var sheetEmail: String?
     @State private var preview: URL?
@@ -18,9 +18,13 @@ struct ThreadScreen: View {
         GeometryReader { window in
             HStack(spacing: 0) {
                 thread(height: window.size.height)
-                if showsPane(width: window.size.width), let email = paneEmail ?? conversation.person {
+                if showsPane(width: window.size.width), let email = paneEmail {
                     Rectangle().fill(Tokens.border.color).frame(width: 1)
-                    PersonView(email: email, openThread: store.open).frame(width: 280)
+                    PersonView(email: email, openThread: store.open)
+                        .overlay(alignment: .topTrailing) {
+                            IconButton(symbol: .x, help: "Close", circled: false) { paneEmail = nil }.padding(12)
+                        }
+                        .frame(width: 280)
                 }
             }
             .onChange(of: sheetEmail) { _, email in

@@ -26,6 +26,9 @@ pub const API_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 const PAGE: usize = 500;
 const BACKFILL_PAGE: usize = 100;
 const CONCURRENT_GETS: usize = 8;
+/// Gmail lets each user spend 15,000 quota units a minute; requests are paced to stay under it.
+const UNITS_PER_SECOND: f64 = 200.0;
+const BURST_UNITS: f64 = 2500.0;
 const HEADERS: [&str; 15] = [
     "From",
     "To",
@@ -52,6 +55,13 @@ pub struct Gmail {
     api: Arc<String>,
     oauth: Arc<OAuth>,
     token: Arc<Mutex<Option<(String, Instant)>>>,
+    pace: Arc<Mutex<Pace>>,
+}
+
+/// The quota units that can be spent now, and when that was counted.
+struct Pace {
+    units: f64,
+    at: Instant,
 }
 
 struct OAuth {
@@ -131,6 +141,7 @@ impl Gmail {
                 refresh_token: credentials.refresh_token,
             }),
             token: Arc::new(Mutex::new(None)),
+            pace: Arc::new(Mutex::new(Pace { units: BURST_UNITS, at: Instant::now() })),
         };
         gmail.access_token().await?;
         Ok(gmail)
@@ -176,7 +187,7 @@ impl Gmail {
     ) -> anyhow::Result<T> {
         let url = format!("{}{path}", self.api);
         let what = format!("{method} {path}");
-        self.execute(&what, || {
+        self.execute(&what, units(&method, path), || {
             let request = self.http.request(method.clone(), &url).query(query);
             match body {
                 Some(body) => request.json(body),
@@ -186,38 +197,65 @@ impl Gmail {
         .await
     }
 
-    /// Sends what `build` makes with the access token, again after a refresh or a busy answer.
+    /// Sends what `build` makes with the access token, again after a refresh, a busy answer or
+    /// Gmail saying the user's quota is spent, which it answers with a 403.
     async fn execute<T: DeserializeOwned>(
         &self,
         what: &str,
+        units: u32,
         build: impl Fn() -> reqwest::RequestBuilder,
     ) -> anyhow::Result<T> {
-        for attempt in 0..3 {
+        for attempt in 0..4 {
+            self.spend(units).await;
             let response = build().bearer_auth(self.access_token().await?).send().await?;
             let status = response.status();
             if status == StatusCode::UNAUTHORIZED && attempt == 0 {
                 *self.token.lock().await = None;
                 continue;
             }
-            if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+            if status.is_server_error() {
                 tokio::time::sleep(Duration::from_millis(500 << attempt)).await;
                 continue;
             }
             if status == StatusCode::NOT_FOUND {
                 return Err(NotFound.into());
             }
+            if status.is_success() {
+                let text = response.text().await?;
+                return Ok(serde_json::from_str(if text.is_empty() { "null" } else { &text })?);
+            }
+            let text = response.text().await.unwrap_or_default();
+            if status == StatusCode::TOO_MANY_REQUESTS || (status == StatusCode::FORBIDDEN && rate_limited(&text)) {
+                self.hold(Duration::from_secs(2 << attempt)).await;
+                continue;
+            }
             if status == StatusCode::BAD_REQUEST || status == StatusCode::CONFLICT {
-                let text = response.text().await.unwrap_or_default();
                 return Err(Refused(format!("Gmail answered {what} with {status}: {text}")).into());
             }
-            if !status.is_success() {
-                let text = response.text().await.unwrap_or_default();
-                anyhow::bail!("Gmail answered {what} with {status}: {text}");
-            }
-            let text = response.text().await?;
-            return Ok(serde_json::from_str(if text.is_empty() { "null" } else { &text })?);
+            anyhow::bail!("Gmail answered {what} with {status}: {text}");
         }
         anyhow::bail!("Gmail kept refusing {what}")
+    }
+
+    /// Waits until `units` of the quota can be spent. Requests queue on the lock, in turn.
+    async fn spend(&self, units: u32) {
+        let mut pace = self.pace.lock().await;
+        let now = Instant::now();
+        pace.units = (pace.units + now.duration_since(pace.at).as_secs_f64() * UNITS_PER_SECOND).min(BURST_UNITS);
+        pace.at = now;
+        pace.units -= f64::from(units);
+        if pace.units < 0.0 {
+            tokio::time::sleep(Duration::from_secs_f64(-pace.units / UNITS_PER_SECOND)).await;
+            pace.units = 0.0;
+            pace.at = Instant::now();
+        }
+    }
+
+    /// Spends nothing for `wait`, from now: Gmail said the quota is spent.
+    async fn hold(&self, wait: Duration) {
+        let mut pace = self.pace.lock().await;
+        pace.units = pace.units.min(-wait.as_secs_f64() * UNITS_PER_SECOND);
+        pace.at = Instant::now();
     }
 
     async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<T> {
@@ -429,7 +467,7 @@ impl Gmail {
         let url = format!("{}/messages/send", self.api.replacen("/gmail/v1/", "/upload/gmail/v1/", 1));
         let content_type = format!("multipart/related; boundary={boundary}");
         let sent: Value = self
-            .execute("POST /messages/send", || {
+            .execute("POST /messages/send", 100, || {
                 self.http
                     .post(&url)
                     .query(&[("uploadType", "multipart")])
@@ -472,6 +510,23 @@ impl Gmail {
         let _: Value = self.request(Method::POST, "/watch", &[], Some(&body)).await?;
         Ok(())
     }
+}
+
+/// What a request costs of the user's quota, from Gmail's table.
+fn units(method: &Method, path: &str) -> u32 {
+    match path {
+        "/profile" | "/settings/sendAs" => 1,
+        "/labels" if method == Method::GET => 1,
+        "/history" => 2,
+        "/messages/batchModify" => 50,
+        "/watch" => 100,
+        _ => 5,
+    }
+}
+
+/// Gmail answers a spent quota with a 403 that says so, unlike a 403 for missing access.
+fn rate_limited(body: &str) -> bool {
+    body.to_ascii_lowercase().contains("ratelimitexceeded")
 }
 
 #[derive(Debug)]

@@ -92,6 +92,7 @@ impl Workers {
     }
 }
 
+/// Waits longer after each failure in a row, so a provider that refuses isn't asked again at once.
 async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mutex<Option<Connection>>>) {
     let mut backoff = Duration::from_secs(2);
     loop {
@@ -99,8 +100,7 @@ async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mut
         match Connection::open(&state, &account).await {
             Ok(connection) => {
                 *slot.lock().unwrap() = Some(connection.clone());
-                backoff = Duration::from_secs(2);
-                if let Err(error) = work(&state, account_id, &connection, &wake).await
+                if let Err(error) = work(&state, account_id, &connection, &wake, &mut backoff).await
                     && handle(&state, &account, &error).await
                 {
                     return;
@@ -130,7 +130,13 @@ async fn handle(state: &AppState, account: &AccountRow, error: &anyhow::Error) -
     false
 }
 
-async fn work(state: &AppState, account_id: Uuid, connection: &Connection, wake: &Notify) -> anyhow::Result<()> {
+async fn work(
+    state: &AppState,
+    account_id: Uuid,
+    connection: &Connection,
+    wake: &Notify,
+    backoff: &mut Duration,
+) -> anyhow::Result<()> {
     let mut daily_at: Option<tokio::time::Instant> = None;
     loop {
         let Some(account) = db::account(&state.db, account_id).await? else { return Ok(()) };
@@ -148,6 +154,7 @@ async fn work(state: &AppState, account_id: Uuid, connection: &Connection, wake:
         flush_ops(state, &account, connection).await?;
         let synced = connection.sync(state, &account).await?;
         db::set_account_status(&state.db, &account, "ready").await?;
+        *backoff = Duration::from_secs(2);
         prefetch(state, &account, connection).await;
         let wait = if synced.backfilling { Duration::from_secs(2) } else { state.config.poll_interval };
         let _ = tokio::time::timeout(wait, wake.notified()).await;
