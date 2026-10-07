@@ -3,23 +3,81 @@
 
 use serde::{Deserialize, Serialize};
 
+use serde_json::Value;
+
 use crate::types::{Draft, role};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Op {
-    SetUnread { ids: Vec<String>, unread: bool },
-    SetStarred { ids: Vec<String>, starred: bool },
-    Archive { ids: Vec<String> },
-    MoveToInbox { ids: Vec<String> },
-    Trash { ids: Vec<String> },
-    Spam { ids: Vec<String> },
-    AddLabel { ids: Vec<String>, label: String },
-    RemoveLabel { ids: Vec<String>, label: String },
-    Snooze { ids: Vec<String>, until: i64 },
-    Send { draft: Box<Draft>, send_at: i64 },
-    CancelSend { op_id: String },
-    RemoveAccount { account_id: String },
+    SetUnread {
+        ids: Vec<String>,
+        unread: bool,
+    },
+    SetStarred {
+        ids: Vec<String>,
+        starred: bool,
+    },
+    Archive {
+        ids: Vec<String>,
+    },
+    MoveToInbox {
+        ids: Vec<String>,
+    },
+    Trash {
+        ids: Vec<String>,
+    },
+    Spam {
+        ids: Vec<String>,
+    },
+    /// `label` is a custom label's id, or the role `inbox`, `trash` or `spam`.
+    AddLabel {
+        ids: Vec<String>,
+        label: String,
+    },
+    RemoveLabel {
+        ids: Vec<String>,
+        label: String,
+    },
+    Snooze {
+        ids: Vec<String>,
+        until: i64,
+    },
+    /// `remind_at` snoozes the sent message until then, unless someone answers first.
+    Send {
+        draft: Box<Draft>,
+        send_at: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remind_at: Option<i64>,
+    },
+    CancelSend {
+        op_id: String,
+    },
+    RemoveAccount {
+        account_id: String,
+    },
+    /// Leaves the list a message came from, by its one-click URL or its mailto address.
+    Unsubscribe {
+        id: String,
+    },
+    /// `None` removes the key.
+    SetPreference {
+        key: String,
+        value: Option<Value>,
+    },
+    SaveDraft {
+        draft_id: String,
+        draft: Box<Draft>,
+    },
+    DeleteDraft {
+        draft_id: String,
+    },
+    /// `label_id` is a new UUID chosen by the client, so ops can use the label at once.
+    CreateLabel {
+        account_id: String,
+        label_id: String,
+        name: String,
+    },
 }
 
 /// The part of a message that ops change.
@@ -44,7 +102,14 @@ impl Op {
             | Op::AddLabel { ids, .. }
             | Op::RemoveLabel { ids, .. }
             | Op::Snooze { ids, .. } => ids,
-            Op::Send { .. } | Op::CancelSend { .. } | Op::RemoveAccount { .. } => &[],
+            Op::Send { .. }
+            | Op::CancelSend { .. }
+            | Op::RemoveAccount { .. }
+            | Op::Unsubscribe { .. }
+            | Op::SetPreference { .. }
+            | Op::SaveDraft { .. }
+            | Op::DeleteDraft { .. }
+            | Op::CreateLabel { .. } => &[],
         }
     }
 
@@ -75,7 +140,14 @@ impl Op {
                 state.remove(role::INBOX);
                 state.snoozed_until = Some(*until);
             }
-            Op::Send { .. } | Op::CancelSend { .. } | Op::RemoveAccount { .. } => {}
+            Op::Send { .. }
+            | Op::CancelSend { .. }
+            | Op::RemoveAccount { .. }
+            | Op::Unsubscribe { .. }
+            | Op::SetPreference { .. }
+            | Op::SaveDraft { .. }
+            | Op::DeleteDraft { .. }
+            | Op::CreateLabel { .. } => {}
         }
     }
 }

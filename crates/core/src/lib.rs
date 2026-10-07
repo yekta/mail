@@ -8,4 +8,6 @@ pub mod ffi;
 mod http;
 mod link;
 pub mod render;
+mod search;
 pub mod store;
+mod undo;

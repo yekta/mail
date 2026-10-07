@@ -5,21 +5,22 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use mail_protocol::{Address, Attachment, Draft, Op, Recipients, role};
+use mail_protocol::{Address, Attachment, Draft, Identity, Op, Recipients, role};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-use super::{Batch, Reauth, Synced, one_line};
+use super::{Batch, Reauth, Refused, Synced, html_text, one_line};
 use crate::db::{self, AccountRow, RemoteMessage};
+use crate::mime::{File, ListHeaders};
 use crate::{AppState, mime};
 
 const CORE: &str = "urn:ietf:params:jmap:core";
 const MAIL: &str = "urn:ietf:params:jmap:mail";
 const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
 const PAGE: usize = 250;
-const EMAIL_PROPERTIES: [&str; 17] = [
+const EMAIL_PROPERTIES: [&str; 22] = [
     "id",
     "threadId",
     "mailboxIds",
@@ -37,6 +38,11 @@ const EMAIL_PROPERTIES: [&str; 17] = [
     "inReplyTo",
     "references",
     "attachments",
+    "header:List-Unsubscribe:asURLs",
+    "header:List-Unsubscribe-Post:asText",
+    "header:List-Id:asText",
+    "header:Precedence:asText",
+    "header:Auto-Submitted:asText",
 ];
 
 /// Where an account logs in: kept in the account's `login` column.
@@ -71,6 +77,10 @@ struct SyncState {
     synced: usize,
     #[serde(default)]
     backfilled: bool,
+    /// The newest pages were fetched again for what was added after they were first synced
+    /// (`bulk`, `unsubscribe`), keeping the Email state.
+    #[serde(default)]
+    refreshed: bool,
 }
 
 /// The account's mailboxes: which one has each role, and the others as labels.
@@ -135,16 +145,50 @@ impl Jmap {
 
     /// The address mail is sent from: the first identity, else the login.
     pub async fn address(&self) -> anyhow::Result<Address> {
-        let identities = self.identities().await.unwrap_or_default();
+        let identities = self.identity_list().await.unwrap_or_default();
         if let Some(identity) = identities.first() {
             return Ok(Address::new(identity["name"].as_str(), identity["email"].as_str().unwrap_or_default()));
         }
         Ok(Address::new(None, &self.session.username))
     }
 
-    async fn identities(&self) -> anyhow::Result<Vec<Value>> {
+    async fn identity_list(&self) -> anyhow::Result<Vec<Value>> {
         let responses = self.call(&[CORE, MAIL, SUBMISSION], vec![("Identity/get", json!({}))]).await?;
         Ok(responses[0]["list"].as_array().cloned().unwrap_or_default())
+    }
+
+    /// The account's identities, the login's own first.
+    pub async fn identities(&self) -> anyhow::Result<Vec<Identity>> {
+        let mut identities: Vec<Identity> = self
+            .identity_list()
+            .await?
+            .iter()
+            .filter_map(|identity| {
+                let address = Address::new(identity["name"].as_str(), identity["email"].as_str()?);
+                let text = identity["textSignature"].as_str().map(str::trim).filter(|text| !text.is_empty());
+                let signature = text
+                    .map(String::from)
+                    .or_else(|| identity["htmlSignature"].as_str().map(html_text))
+                    .filter(|text| !text.is_empty());
+                Some(Identity { name: address.name, email: address.email, signature })
+            })
+            .collect();
+        identities.sort_by_key(|identity| !identity.email.eq_ignore_ascii_case(&self.session.username));
+        Ok(identities)
+    }
+
+    pub async fn create_label(&self, name: &str) -> anyhow::Result<String> {
+        let create = json!({ "create": { "l": { "name": name, "parentId": null } } });
+        let answers = self.call(&[CORE, MAIL], vec![("Mailbox/set", create)]).await?;
+        if let Some(id) = answers[0]["created"]["l"]["id"].as_str() {
+            return Ok(id.to_string());
+        }
+        let failed = &answers[0]["notCreated"]["l"];
+        let kind = failed["type"].as_str().unwrap_or("serverFail");
+        if ["serverFail", "serverUnavailable", "serverPartialFail", "rateLimit"].contains(&kind) {
+            anyhow::bail!("the JMAP server couldn't make the label now: {failed}");
+        }
+        Err(Refused(format!("the JMAP server won't make the label: {failed}")).into())
     }
 
     /// Runs method calls in one request. Each gets the account id; the answers come in order.
@@ -264,6 +308,7 @@ impl Jmap {
         match sync.email_state.clone() {
             None => {
                 let limit = state.config.initial_sync_limit;
+                sync.refreshed = true;
                 while sync.synced < limit {
                     let wanted = PAGE.min(limit - sync.synced);
                     let (count, email_state) = self.page(state, account, &mailboxes, sync.synced, wanted).await?;
@@ -284,6 +329,19 @@ impl Jmap {
             },
         }
 
+        if !sync.refreshed && sync.email_state.is_some() {
+            let limit = state.config.initial_sync_limit;
+            let mut position = 0;
+            while position < limit {
+                let wanted = PAGE.min(limit - position);
+                let (count, _) = self.page(state, account, &mailboxes, position, wanted).await?;
+                position += count;
+                if count < wanted {
+                    break;
+                }
+            }
+            sync.refreshed = true;
+        }
         if !sync.backfilled && sync.email_state.is_some() {
             let (count, _) = self.page(state, account, &mailboxes, sync.synced, PAGE).await?;
             sync.synced += count;
@@ -381,9 +439,21 @@ impl Jmap {
                 .and_then(|mailbox| mailbox["id"].as_str())
                 .map(String::from)
         };
-        let label = |id: &String| id.parse::<Uuid>().ok().and_then(|id| labels.get(&id).cloned());
+        let label = |id: &String| match id.as_str() {
+            role::INBOX => role_id("inbox"),
+            role::TRASH => role_id("trash"),
+            role::SPAM => role_id("junk"),
+            _ => id.parse::<Uuid>().ok().and_then(|id| labels.get(&id).cloned()),
+        };
         let only = |mailbox: Option<String>| -> Vec<(String, Value)> {
             mailbox.map(|id| vec![("mailboxIds".to_string(), json!({ id: true }))]).unwrap_or_default()
+        };
+        // Out of the inbox and into the archive, so the message is never in no mailbox.
+        let archive = || {
+            let mut patch = Vec::new();
+            patch.extend(role_id("inbox").map(|id| (format!("mailboxIds/{id}"), Value::Null)));
+            patch.extend(role_id("archive").map(|id| (format!("mailboxIds/{id}"), json!(true))));
+            patch
         };
         let patch: Vec<(String, Value)> = match &batch.op {
             Op::SetUnread { unread, .. } => {
@@ -392,22 +462,26 @@ impl Jmap {
             Op::SetStarred { starred, .. } => {
                 vec![("keywords/$flagged".into(), if *starred { json!(true) } else { Value::Null })]
             }
-            Op::Archive { .. } | Op::Snooze { .. } => {
-                let mut patch = Vec::new();
-                patch.extend(role_id("inbox").map(|id| (format!("mailboxIds/{id}"), Value::Null)));
-                patch.extend(role_id("archive").map(|id| (format!("mailboxIds/{id}"), json!(true))));
+            Op::Archive { .. } | Op::Snooze { .. } => archive(),
+            // Keeps Sent and the labels, so mail that was only sent comes back to the inbox whole.
+            Op::MoveToInbox { .. } => {
+                let mut patch: Vec<(String, Value)> = ["trash", "junk", "archive"]
+                    .into_iter()
+                    .filter_map(|wanted| role_id(wanted).map(|id| (format!("mailboxIds/{id}"), Value::Null)))
+                    .collect();
+                patch.extend(role_id("inbox").map(|id| (format!("mailboxIds/{id}"), json!(true))));
                 patch
             }
-            Op::MoveToInbox { .. } => only(role_id("inbox")),
             Op::Trash { .. } => only(role_id("trash")),
             Op::Spam { .. } => only(role_id("junk")),
             Op::AddLabel { label: id, .. } => {
                 label(id).map(|id| vec![(format!("mailboxIds/{id}"), json!(true))]).unwrap_or_default()
             }
+            Op::RemoveLabel { label: id, .. } if id == role::INBOX => archive(),
             Op::RemoveLabel { label: id, .. } => {
                 label(id).map(|id| vec![(format!("mailboxIds/{id}"), Value::Null)]).unwrap_or_default()
             }
-            Op::Send { .. } | Op::CancelSend { .. } | Op::RemoveAccount { .. } => return Ok(()),
+            _ => return Ok(()),
         };
         if patch.is_empty() {
             return Ok(());
@@ -443,8 +517,8 @@ impl Jmap {
         Ok(response.bytes().await?.to_vec())
     }
 
-    pub async fn send(&self, draft: &Draft, from: &Address) -> anyhow::Result<()> {
-        let identities = self.identities().await?;
+    pub async fn send(&self, draft: &Draft, from: &Address, files: &[File]) -> anyhow::Result<Option<String>> {
+        let identities = self.identity_list().await?;
         let identity = identities
             .iter()
             .find(|identity| identity["email"].as_str().is_some_and(|email| email.eq_ignore_ascii_case(&from.email)))
@@ -453,7 +527,7 @@ impl Jmap {
             .ok_or_else(|| anyhow::anyhow!("this account has no identity to send from"))?
             .to_string();
         let domain = from.email.split('@').nth(1).unwrap_or("localhost");
-        let raw = mime::build(draft, from, &mime::new_message_id(domain), false);
+        let raw = mime::build(draft, from, &mime::new_message_id(domain), false, files);
         let blob = self.upload(raw).await?;
         let mailboxes = self
             .call(&[CORE, MAIL], vec![("Mailbox/get", json!({ "ids": null, "properties": ["id", "role"] }))])
@@ -493,7 +567,7 @@ impl Jmap {
                 failed.get("description").or(failed.get("type")).unwrap_or(&Value::Null)
             );
         }
-        Ok(())
+        Ok(Some(email_id.clone()))
     }
 }
 
@@ -539,6 +613,19 @@ fn remote(email: &Value, mailboxes: &Mailboxes) -> RemoteMessage {
             size: part["size"].as_i64().unwrap_or(0),
         })
         .collect();
+    let text = |key: &str| email[key].as_str();
+    let list = ListHeaders {
+        unsubscribe: email["header:List-Unsubscribe:asURLs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|url| url.as_str().map(String::from))
+            .collect(),
+        unsubscribe_post: text("header:List-Unsubscribe-Post:asText"),
+        list_id: text("header:List-Id:asText"),
+        precedence: text("header:Precedence:asText"),
+        auto_submitted: text("header:Auto-Submitted:asText"),
+    };
     let date = email["receivedAt"]
         .as_str()
         .and_then(|date| chrono::DateTime::parse_from_rfc3339(date).ok())
@@ -569,6 +656,8 @@ fn remote(email: &Value, mailboxes: &Mailboxes) -> RemoteMessage {
             .flatten()
             .filter_map(|id| id.as_str().map(String::from))
             .collect(),
+        bulk: list.bulk(),
+        unsubscribe: list.unsubscribe(),
     }
 }
 
@@ -601,5 +690,19 @@ mod tests {
         let archived =
             super::remote(&json!({"id": "e2", "mailboxIds": {"a": true}, "keywords": {"$seen": true}}), &mailboxes);
         assert!(archived.labels.is_empty() && !archived.unread);
+        assert!(!remote.bulk && remote.unsubscribe.is_none());
+
+        let newsletter = super::remote(
+            &json!({
+                "id": "e3", "mailboxIds": {"i": true},
+                "header:List-Unsubscribe:asURLs": ["mailto:leave@list.org", "https://list.org/leave"],
+                "header:List-Unsubscribe-Post:asText": "List-Unsubscribe=One-Click"
+            }),
+            &mailboxes,
+        );
+        assert!(newsletter.bulk);
+        let unsubscribe = newsletter.unsubscribe.unwrap();
+        assert_eq!(unsubscribe.url.as_deref(), Some("https://list.org/leave"));
+        assert!(unsubscribe.one_click);
     }
 }

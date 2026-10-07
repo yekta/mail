@@ -40,7 +40,7 @@ struct SidebarView: View {
     }
 
     private func row(_ mailbox: Mailbox, symbol: Symbol, indent: CGFloat = 0) -> some View {
-        let selected = store.mailbox == mailbox.id && store.searchRows == nil
+        let selected = store.baseMailbox == mailbox.id && store.searchRows == nil
         return Button {
             store.select(mailbox: mailbox.id)
             picked(mailbox.id)

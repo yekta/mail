@@ -1248,6 +1248,7 @@ dependencies = [
  "mail-core",
  "mail-parser",
  "mail-protocol",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",

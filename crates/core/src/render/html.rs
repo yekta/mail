@@ -126,6 +126,59 @@ pub fn sanitize(html: &str, show_images: bool, blocked: Arc<AtomicBool>) -> Stri
     builder.clean(html).to_string()
 }
 
+const PRINT_STYLE: &str = r#"
+body { font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: #111; background: #fff;
+  margin: 24px; overflow-wrap: anywhere; }
+h1 { font-size: 18px; margin: 0 0 16px; }
+.message { border-top: 1px solid #ccc; padding: 12px 0; }
+.headers { color: #555; margin-bottom: 12px; }
+.headers b { color: #111; }
+.plain { white-space: pre-wrap; }
+blockquote { margin: 0 0 0 2px; padding-left: 12px; border-left: 2px solid #ccc; color: #555; }
+details.quote > summary { display: none; }
+img { max-width: 100%; height: auto; }
+table { max-width: 100%; }
+"#;
+
+/// One message of a thread to print, its headers ready to show.
+pub struct Printed<'a> {
+    pub from: String,
+    pub to: String,
+    pub cc: String,
+    pub date: String,
+    pub body: Option<Body>,
+    pub snippet: &'a str,
+}
+
+/// A whole thread as one page to print: every message open, with its headers, remote images left
+/// out.
+pub fn print(subject: &str, messages: &[Printed]) -> String {
+    let subject = text::escape(subject);
+    let mut html = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{subject}</title>\
+         <meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'\">\
+         <style>{PRINT_STYLE}</style></head><body><h1>{subject}</h1>"
+    );
+    for message in messages {
+        let content = match &message.body {
+            Some(Body { html: Some(body), .. }) => sanitize(body, false, Arc::new(AtomicBool::new(false))),
+            Some(Body { text: Some(body), .. }) => {
+                text::to_html(body).replace("<details class=\"quote\">", "<details class=\"quote\" open>")
+            }
+            _ => format!("<div class=\"plain\">{}</div>", text::escape(message.snippet)),
+        };
+        let mut headers = format!("<b>{}</b>", text::escape(&message.from));
+        for (name, value) in [("To", &message.to), ("Cc", &message.cc), ("Date", &message.date)] {
+            if !value.is_empty() {
+                headers.push_str(&format!("<br>{name}: {}", text::escape(value)));
+            }
+        }
+        html.push_str(&format!("<div class=\"message\"><div class=\"headers\">{headers}</div>{content}</div>"));
+    }
+    html.push_str("</body></html>");
+    html
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +227,42 @@ mod tests {
         assert!(page(&html("<div>Hi Ann,<br>See you.</div>"), false).html.contains("class=\"themed\""));
         let plain = page(&Body { html: None, text: Some("Hi <b>".into()) }, false);
         assert!(plain.html.contains("class=\"themed\"") && plain.html.contains("Hi &lt;b&gt;"));
+    }
+
+    #[test]
+    fn prints_every_message_open_with_its_headers() {
+        let messages = [
+            Printed {
+                from: "Ann <ann@x.com>".into(),
+                to: "me@example.com".into(),
+                cc: String::new(),
+                date: "Mar 3, 2026 at 9:41 AM".into(),
+                body: Some(Body { html: None, text: Some("Lunch?\n\nOn Mar 2, Bob wrote:\n> Hungry".into()) }),
+                snippet: "",
+            },
+            Printed {
+                from: "Bob".into(),
+                to: String::new(),
+                cc: String::new(),
+                date: String::new(),
+                body: Some(html("<p>Yes<img src=\"https://t.example/p.gif\"><script>x()</script></p>")),
+                snippet: "",
+            },
+            Printed {
+                from: "Cy".into(),
+                to: String::new(),
+                cc: String::new(),
+                date: String::new(),
+                body: None,
+                snippet: "On its way",
+            },
+        ];
+        let page = print("Lunch <3", &messages);
+        assert!(page.contains("<title>Lunch &lt;3</title>"));
+        assert!(page.contains("<b>Ann &lt;ann@x.com&gt;</b><br>To: me@example.com<br>Date: Mar 3, 2026 at 9:41 AM"));
+        assert!(page.contains("<details class=\"quote\" open>"));
+        assert!(page.contains("<p>Yes") && !page.contains("t.example") && !page.contains("x()"));
+        assert!(page.contains("On its way"));
     }
 
     #[test]

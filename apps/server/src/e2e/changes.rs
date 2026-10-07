@@ -88,3 +88,35 @@ async fn an_op_sent_twice_is_applied_once_and_holds_off_stale_provider_state(db:
     let labels: Vec<String> = sqlx::query_scalar("SELECT labels FROM messages").fetch_one(&db).await.unwrap();
     assert!(labels.is_empty());
 }
+
+#[sqlx::test]
+async fn preferences_and_drafts_sync_and_leave_tombstones(db: PgPool) {
+    let server = Server::start(db.clone()).await;
+    let user = db::create_user(&db).await.unwrap();
+    let read = async |cursor| {
+        let ServerMessage::Changes { preferences, drafts, cursor, .. } =
+            crate::changes::read(&db, user, cursor).await.unwrap()
+        else {
+            panic!("not changes");
+        };
+        (preferences, drafts, cursor)
+    };
+    let apply = async |op_id: &str, op: Op| {
+        let outcome = ops::apply(&server.state, user, op_id, op).await.unwrap();
+        assert!(matches!(outcome, ops::Outcome::Done { ok: true, .. }));
+    };
+    let draft = mail_protocol::Draft { subject: "Plans".into(), text: "Hi".into(), ..Default::default() };
+
+    apply("1", Op::SetPreference { key: "split_inbox".into(), value: Some(serde_json::json!(true)) }).await;
+    apply("2", Op::SaveDraft { draft_id: "d1".into(), draft: Box::new(draft.clone()) }).await;
+    let (preferences, drafts, cursor) = read(0).await;
+    assert_eq!((preferences[0].key.as_str(), &preferences[0].value), ("split_inbox", &serde_json::json!(true)));
+    assert_eq!((drafts[0].id.as_str(), &drafts[0].draft, drafts[0].deleted), ("d1", &draft, false));
+
+    apply("3", Op::SetPreference { key: "split_inbox".into(), value: None }).await;
+    apply("4", Op::DeleteDraft { draft_id: "d1".into() }).await;
+    let (preferences, drafts, next) = read(cursor).await;
+    assert!(preferences.len() == 1 && preferences[0].deleted);
+    assert!(drafts.len() == 1 && drafts[0].deleted);
+    assert_eq!(read(next).await, (vec![], vec![], next));
+}

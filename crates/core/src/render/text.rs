@@ -17,7 +17,7 @@ pub fn escape(text: &str) -> String {
     out
 }
 
-fn linked(line: &str) -> String {
+pub(crate) fn linked(line: &str) -> String {
     let mut out = String::new();
     for span in LinkFinder::new().spans(line) {
         let text = escape(span.as_str());

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Accounts, appearance, the undo delay and the server.
+/// Accounts, signatures, snippets, Split Inbox, blocked senders, notifications, appearance, the
+/// undo delay and the server. What is synced is kept as the core's preferences.
 struct SettingsView: View {
     @Environment(MailStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -9,13 +10,13 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var store = store
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 30) {
                 HStack {
                     Text("Settings").font(.ui(20, .semibold))
                     Spacer()
                     IconButton(symbol: .x, help: "Close", circled: false) { dismiss() }
                 }
-                section("Accounts") {
+                SettingsSection(title: "Accounts") {
                     ForEach(store.accounts) { account in
                         HStack(spacing: 10) {
                             Circle().fill(Theme.accountColor(account.color).color).frame(width: 8, height: 8)
@@ -33,7 +34,16 @@ struct SettingsView: View {
                         ActionButton(title: "Add account", symbol: .plus, variant: .outline) { adding = true }
                     }
                 }
-                section("Appearance") {
+                if store.preferencesLoaded {
+                    SettingsSection(title: "Signatures", detail: "Put under what you write from each account.") { SignatureSettings() }
+                    SettingsSection(title: "Snippets", detail: "Type ; and a name while writing to put one in, or press ⌘;. {first_name} becomes the first recipient's first name.") {
+                        SnippetSettings()
+                    }
+                    SettingsSection(title: "Split Inbox") { SplitSettings() }
+                    SettingsSection(title: "Blocked senders", detail: "Their new mail goes to the trash.") { BlockedSettings() }
+                    SettingsSection(title: "Notifications") { NotificationSettings() }
+                }
+                SettingsSection(title: "Appearance") {
                     Picker("", selection: $store.appearance) {
                         ForEach(Appearance.allCases) { appearance in Text(appearance.name).tag(appearance) }
                     }
@@ -41,7 +51,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .fixedSize()
                 }
-                section("Undo send") {
+                SettingsSection(title: "Undo send") {
                     Picker("", selection: $store.undoDelay) {
                         Text("Off").tag(0)
                         ForEach([5, 10, 20, 30], id: \.self) { seconds in Text("\(seconds) s").tag(seconds) }
@@ -50,7 +60,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .fixedSize()
                 }
-                section("Server") {
+                SettingsSection(title: "Server") {
                     Text(store.server).font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color).textSelection(.enabled)
                     Text(connectionText).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
                 }
@@ -61,11 +71,12 @@ struct SettingsView: View {
             }
             .foregroundStyle(Tokens.foreground.color)
             .padding(28)
-            .frame(maxWidth: 520, alignment: .leading)
+            .frame(maxWidth: 560, alignment: .leading)
         }
         .background(Tokens.background.color)
+        .task { await store.loadPreferences() }
         #if os(macOS)
-        .frame(minWidth: 520, minHeight: 560)
+        .frame(width: 560, height: 620)
         #endif
     }
 
@@ -85,11 +96,23 @@ struct SettingsView: View {
         default: account.provider == "gmail" ? "Gmail" : "JMAP"
         }
     }
+}
 
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+/// A part of the settings: a small heading, maybe a line about it, and its controls.
+struct SettingsSection<Content: View>: View {
+    let title: String
+    var detail: String?
+    @ViewBuilder let content: Content
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title.uppercased()).font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedForeground.color)
-            content()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title.uppercased()).font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedForeground.color)
+                if let detail {
+                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            content
         }
     }
 }

@@ -3,11 +3,13 @@ import AppKit
 import SwiftUI
 
 /// The thread list on the Mac: a table that only makes the rows on screen, each drawn in one
-/// pass. Hovering a row shows what can be done to it, as Newton did.
+/// pass. Hovering a row shows what can be done to it, as Newton did. ⌘-click picks rows,
+/// Shift-click picks the rows up to one.
 struct ThreadListMac: NSViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
     let selected: String?
+    let checked: Set<String>
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store) }
 
@@ -31,42 +33,76 @@ struct ThreadListMac: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            context.coordinator, selector: #selector(Coordinator.scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView
+        )
         context.coordinator.table = table
         return scroll
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        context.coordinator.update(rows: rows, selected: selected)
+        context.coordinator.update(rows: rows, selected: selected, checked: checked)
     }
 
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        NotificationCenter.default.removeObserver(coordinator)
+    }
+
+    @MainActor
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let store: MailStore
         weak var table: HoverTableView?
         private var rows: [ThreadRow] = []
         private var texts: [String: (ThreadRow, RowText)] = [:]
         private var selected: String?
+        private var checked: Set<String> = []
+        private var prefetch: DispatchWorkItem?
 
         init(store: MailStore) {
             self.store = store
         }
 
-        func update(rows: [ThreadRow], selected: String?) {
+        func update(rows: [ThreadRow], selected: String?, checked: Set<String>) {
             guard let table else { return }
-            let changed = rows != self.rows
             let moved = selected != self.selected
+            let picked = checked != self.checked
+            let changed = Self.changes(from: self.rows, to: rows)
             self.rows = rows
             self.selected = selected
-            if changed {
+            self.checked = checked
+            if let changed {
+                for index in changed {
+                    guard let view = table.rowView(atRow: index, makeIfNecessary: false) as? ThreadRowView else { continue }
+                    configure(view, at: index)
+                }
+            } else {
                 table.reloadData()
-            } else if moved {
+            }
+            if changed != nil, moved || picked {
                 table.enumerateAvailableRowViews { view, _ in
-                    guard let view = view as? ThreadRowView else { return }
-                    view.isCurrent = view.row?.id == selected
+                    guard let view = view as? ThreadRowView, let id = view.row?.id else { return }
+                    view.isCurrent = id == selected
+                    view.isChecked = checked.contains(id)
                 }
             }
             if moved, let selected, let index = rows.firstIndex(where: { $0.id == selected }) {
                 table.scrollRowToVisible(index)
             }
+            if changed != [] { schedulePrefetch() }
+        }
+
+        /// The rows that changed when the list holds the same threads in the same order; nil
+        /// when it doesn't, and the whole table is read again.
+        private static func changes(from old: [ThreadRow], to new: [ThreadRow]) -> IndexSet? {
+            guard old != new else { return [] }
+            guard old.count == new.count else { return nil }
+            var changed = IndexSet()
+            for index in new.indices where old[index] != new[index] {
+                guard old[index].id == new[index].id else { return nil }
+                changed.insert(index)
+            }
+            return changed
         }
 
         private func text(for row: ThreadRow) -> RowText {
@@ -76,34 +112,71 @@ struct ThreadListMac: NSViewRepresentable {
             return text
         }
 
+        private func configure(_ view: ThreadRowView, at index: Int) {
+            let row = rows[index]
+            view.configure(
+                row: row, text: text(for: row), current: row.id == selected, checked: checked.contains(row.id),
+                hovering: table?.hovered == index
+            )
+        }
+
         func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
         func tableView(_ tableView: NSTableView, rowViewForRow index: Int) -> NSTableRowView? {
             let identifier = NSUserInterfaceItemIdentifier("row")
             let view = tableView.makeView(withIdentifier: identifier, owner: nil) as? ThreadRowView ?? ThreadRowView()
             view.identifier = identifier
-            let row = rows[index]
-            view.configure(row: row, text: text(for: row), current: row.id == selected, hovering: (tableView as? HoverTableView)?.hovered == index)
+            configure(view, at: index)
             if index > rows.count - 30 { DispatchQueue.main.async { self.store.loadMore() } }
             return view
         }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? { nil }
 
-        @MainActor @objc func clicked() {
+        @objc func scrolled() {
+            schedulePrefetch()
+        }
+
+        /// Asks for the bodies of the rows on screen once the list stops moving.
+        private func schedulePrefetch() {
+            prefetch?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let table = self.table else { return }
+                    let visible = table.rows(in: table.visibleRect)
+                    let range = max(visible.location, 0)..<min(visible.location + visible.length, self.rows.count)
+                    guard !range.isEmpty else { return }
+                    self.store.prefetch(self.rows[range].map(\.id))
+                }
+            }
+            prefetch = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        }
+
+        @objc func clicked() {
             guard let table, table.clickedRow >= 0, table.clickedRow < rows.count else { return }
             let row = rows[table.clickedRow]
             guard let view = table.rowView(atRow: table.clickedRow, makeIfNecessary: false) as? ThreadRowView,
                   let event = NSApp.currentEvent
             else { return }
-            let point = view.convert(event.locationInWindow, from: nil)
-            switch view.hit(point) {
-            case .star: store.toggleStar(row.id)
-            case .archive: store.act(.archive, on: [row.id])
-            case .trash: store.act(.trash, on: [row.id])
-            case .snooze: store.snoozing = [row.id]
-            case .read: store.toggleRead(row.id)
-            case .none: store.open(row.id)
+            if event.modifierFlags.contains(.command) {
+                store.toggleSelection(row.id)
+                return
+            }
+            if event.modifierFlags.contains(.shift) {
+                store.extendSelection(to: row.id)
+                return
+            }
+            let threads = store.targets(for: row.id)
+            switch view.hit(view.convert(event.locationInWindow, from: nil)) {
+            case .star: store.run(.star, on: threads)
+            case .archive: store.run(.archive, on: threads)
+            case .trash: store.run(.trash, on: threads)
+            case .snooze: store.run(.snooze, on: threads)
+            case .read: store.run(.read, on: threads)
+            case .none:
+                store.clearSelection()
+                store.open(row.id)
             }
         }
     }
@@ -144,16 +217,18 @@ final class ThreadRowView: NSTableRowView {
     private(set) var row: ThreadRow?
     private var text: RowText?
     var isCurrent = false { didSet { if isCurrent != oldValue { needsDisplay = true } } }
+    var isChecked = false { didSet { if isChecked != oldValue { needsDisplay = true } } }
     var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }
 
     private static let sendersX: CGFloat = 36
     private static let sendersWidth: CGFloat = 190
     private static let iconSide: CGFloat = 16
 
-    func configure(row: ThreadRow, text: RowText, current: Bool, hovering: Bool) {
+    func configure(row: ThreadRow, text: RowText, current: Bool, checked: Bool, hovering: Bool) {
         self.row = row
         self.text = text
         self.isCurrent = current
+        self.isChecked = checked
         self.hovering = hovering
         needsDisplay = true
     }
@@ -166,7 +241,9 @@ final class ThreadRowView: NSTableRowView {
 
     private var actions: [(Hit, Symbol, NSRect)] {
         guard let row else { return [] }
-        let kinds: [(Hit, Symbol)] = [(.read, row.unread ? .mailOpen : .mail), (.snooze, .clock), (.trash, .trash), (.archive, .archive)]
+        let kinds: [(Hit, Symbol)] = row.draftId != nil
+            ? [(.trash, .trash)]
+            : [(.read, row.unread ? .mailOpen : .mail), (.snooze, .clock), (.trash, .trash), (.archive, .archive)]
         return kinds.enumerated().map { index, kind in
             let x = starRect.minX - 34 - CGFloat(index) * 30
             return (kind.0, kind.1, NSRect(x: x, y: (bounds.height - Self.iconSide) / 2, width: Self.iconSide, height: Self.iconSide))
@@ -174,7 +251,7 @@ final class ThreadRowView: NSTableRowView {
     }
 
     func hit(_ point: NSPoint) -> Hit {
-        if starRect.insetBy(dx: -8, dy: -12).contains(point) { return .star }
+        if row?.draftId == nil, starRect.insetBy(dx: -8, dy: -12).contains(point) { return .star }
         guard hovering else { return .none }
         return actions.first(where: { $0.2.insetBy(dx: -7, dy: -12).contains(point) })?.0 ?? .none
     }
@@ -183,6 +260,10 @@ final class ThreadRowView: NSTableRowView {
         let fill = isCurrent || hovering ? Tokens.accent.platform : Tokens.card.platform
         fill.setFill()
         bounds.fill()
+        if isChecked {
+            Tokens.primary.platform.withAlphaComponent(0.1).setFill()
+            bounds.fill()
+        }
         Tokens.border.platform.setFill()
         NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
         if let row {
@@ -197,7 +278,9 @@ final class ThreadRowView: NSTableRowView {
         super.draw(dirtyRect)
         guard let row, let text else { return }
         let middle = bounds.height / 2
-        if row.unread {
+        if isChecked {
+            Self.drawSymbol(.squareCheck, in: NSRect(x: 13, y: middle - 8, width: 16, height: 16), color: Tokens.primary.platform)
+        } else if row.unread {
             Tokens.primary.platform.setFill()
             NSBezierPath(ovalIn: NSRect(x: 18, y: middle - 3.5, width: 7, height: 7)).fill()
         }
@@ -219,6 +302,7 @@ final class ThreadRowView: NSTableRowView {
             trailing = starRect.minX - 34 - dateWidth
         }
         Self.drawLine(text.line, x: x, width: max(trailing - x, 0), middle: middle)
+        guard row.draftId == nil else { return }
         let starColor = row.starred ? Tokens.star.platform : Tokens.input.platform
         Self.drawSymbol(row.starred ? .starFilled : .star, in: starRect, color: starColor)
     }

@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::ops::{self, Outcome};
-use crate::{AppState, api, changes, db, workers};
+use crate::{AppState, api, changes, db, search, workers};
 
 pub async fn socket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| run(state, socket))
@@ -97,8 +97,15 @@ impl Session {
                     return false;
                 }
             };
-            let ServerMessage::Changes { accounts, labels, messages, cursor, more } = &batch else { return false };
-            let empty = accounts.is_empty() && labels.is_empty() && messages.is_empty();
+            let ServerMessage::Changes { accounts, labels, messages, preferences, drafts, cursor, more } = &batch
+            else {
+                return false;
+            };
+            let empty = accounts.is_empty()
+                && labels.is_empty()
+                && messages.is_empty()
+                && preferences.is_empty()
+                && drafts.is_empty();
             let (cursor, more) = (*cursor, *more);
             if (!empty || !self.caught_up) && !self.send(batch).await {
                 return false;
@@ -150,7 +157,10 @@ impl Session {
                 }
             },
             ClientMessage::Search { request, query } => {
-                let message_ids = db::search(&self.state.db, self.user_id, &query).await.unwrap_or_default();
+                let message_ids = search::run(&self.state.db, self.user_id, &query).await.unwrap_or_else(|error| {
+                    tracing::warn!("search failed: {error}");
+                    Vec::new()
+                });
                 let message_ids = message_ids.iter().map(Uuid::to_string).collect();
                 self.send(ServerMessage::SearchResults { request, message_ids }).await
             }

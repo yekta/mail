@@ -1,39 +1,110 @@
+import QuickLook
 import SwiftUI
 
-/// A thread: its subject, who is in it, and its messages stacked as cards; the earlier ones
-/// folded to a line, as Newton showed them.
+/// A thread: its subject, its labels, who is in it, and its messages stacked as cards; the
+/// earlier ones folded to a line, as Newton showed them. It opens on the first unread message.
+/// On a wide Mac window the person it is with is shown beside it.
 struct ThreadScreen: View {
     @Environment(MailStore.self) private var store
     let conversation: Conversation
-    @State private var unfolded: Set<String> = []
+    /// A sender clicked, shown in the pane instead of the thread's person.
+    @State private var paneEmail: String?
+    @State private var sheetEmail: String?
+    @State private var preview: URL?
+    /// A copy of an attachment, while the user picks where to save it.
+    @State private var saving: URL?
 
     var body: some View {
         GeometryReader { window in
+            HStack(spacing: 0) {
+                thread(height: window.size.height)
+                if showsPane(width: window.size.width), let email = paneEmail ?? conversation.person {
+                    Rectangle().fill(Tokens.border.color).frame(width: 1)
+                    PersonView(email: email, openThread: store.open).frame(width: 280)
+                }
+            }
+            .onChange(of: sheetEmail) { _, email in
+                // Where the pane is shown, a sender opens in it rather than in a sheet.
+                guard let email, showsPane(width: window.size.width) else { return }
+                paneEmail = email
+                sheetEmail = nil
+            }
+        }
+        .background(Tokens.background.color)
+        .quickLookPreview($preview)
+        .fileMover(isPresented: Binding(get: { saving != nil }, set: { if !$0 { saving = nil } }), file: saving) { result in
+            guard case .failure(let error) = result else { return }
+            store.show(error.localizedDescription)
+        }
+        .sheet(isPresented: Binding(get: { sheetEmail != nil }, set: { if !$0 { sheetEmail = nil } })) {
+            #if os(macOS)
+            PersonView(email: sheetEmail ?? "", closeSheet: { sheetEmail = nil }) { thread in
+                sheetEmail = nil
+                store.open(thread)
+            }
+            .environment(store)
+            .frame(width: 340, height: 460)
+            #else
+            PersonView(email: sheetEmail ?? "", closeSheet: { sheetEmail = nil }) { thread in
+                sheetEmail = nil
+                store.show(thread: thread)
+            }
+            .environment(store)
+            .presentationDetents([.medium, .large])
+            #endif
+        }
+        .id(conversation.id)
+    }
+
+    private func showsPane(width: CGFloat) -> Bool {
+        #if os(macOS)
+        width >= 1100
+        #else
+        false
+        #endif
+    }
+
+    private func thread(height: CGFloat) -> some View {
+        ScrollViewReader { proxy in
             ScrollView {
                 page
                     #if os(macOS)
                     .padding(.top, 16)
                     .padding(.horizontal, 24)
                     #endif
-                    .frame(maxWidth: .infinity, minHeight: window.size.height, alignment: .top)
+                    .frame(maxWidth: .infinity, minHeight: height, alignment: .top)
                     #if os(macOS)
                     // The page around the card: a click there closes the thread, as Newton's did.
                     .background { Tokens.background.color.onTapGesture(perform: store.close) }
                     #endif
             }
+            .onAppear {
+                let unread = conversation.messages.first(where: \.unread)?.id
+                store.focusedMessage = unread
+                guard let unread else { return }
+                DispatchQueue.main.async { proxy.scrollTo(unread, anchor: .top) }
+            }
+            .onChange(of: store.focusedMessage) { _, id in
+                guard let id else { return }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .top) }
+            }
         }
-        .background(Tokens.background.color)
-        .id(conversation.id)
     }
 
     private var page: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             ForEach(conversation.messages) { message in
-                let folded = message.folded && !unfolded.contains(message.id)
-                MessageCard(message: message, folded: folded)
-                    .contentShape(Rectangle())
-                    .onTapGesture { if folded { unfolded.insert(message.id) } }
+                let folded = message.folded && !store.unfoldedMessages.contains(message.id)
+                MessageCard(
+                    message: message, folded: folded,
+                    showPerson: { sheetEmail = message.fromEmail },
+                    open: { index in open(message, index) },
+                    save: { index in save(message, index) }
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { if folded { store.unfoldedMessages.insert(message.id) } }
+                .id(message.id)
                 if message.id != conversation.messages.last?.id {
                     Rectangle().fill(Tokens.border.color).frame(height: 1)
                 }
@@ -41,6 +112,9 @@ struct ThreadScreen: View {
             if conversation.messages.contains(where: \.blockedImages) {
                 ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
                     .padding(.top, 8)
+            }
+            if let draft = conversation.draftId {
+                draftCard(draft)
             }
             replies
         }
@@ -59,27 +133,61 @@ struct ThreadScreen: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(conversation.subject)
-                    .font(.ui(24, .semibold))
-                    .foregroundStyle(Tokens.foreground.color)
-                    .textSelection(.enabled)
-                Text(conversation.participants)
-                    .font(.ui(13))
-                    .foregroundStyle(Tokens.mutedForeground.color)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(conversation.subject)
+                        .font(.ui(24, .semibold))
+                        .foregroundStyle(Tokens.foreground.color)
+                        .textSelection(.enabled)
+                    Text(conversation.participants)
+                        .font(.ui(13))
+                        .foregroundStyle(Tokens.mutedForeground.color)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    store.toggleStar(conversation.id)
+                } label: {
+                    Image(conversation.starred ? .starFilled : .star, size: 20)
+                        .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedForeground.color)
+                }
+                .buttonStyle(.plain)
+                .help(conversation.starred ? "Unstar" : "Star")
             }
-            Spacer(minLength: 0)
-            Button {
-                store.toggleStar(conversation.id)
-            } label: {
-                Image(conversation.starred ? .starFilled : .star, size: 20)
-                    .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedForeground.color)
+            if !conversation.labels.isEmpty || conversation.muted || conversation.unsubscribe {
+                HStack(alignment: .center, spacing: 12) {
+                    FlowLayout {
+                        ForEach(conversation.labels) { label in Chip(title: label.name, symbol: .tag) }
+                        if conversation.muted {
+                            Chip(title: "Muted", symbol: .bellOff, help: "New mail in this thread stays out of the inbox")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if conversation.unsubscribe {
+                        ActionButton(title: "Unsubscribe", symbol: .mailX, variant: .ghost) { store.act(.unsubscribe, on: [conversation.id]) }
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .help(conversation.starred ? "Unstar" : "Star")
         }
         .padding(.bottom, 20)
+    }
+
+    /// The reply the user started and didn't send.
+    private func draftCard(_ id: String) -> some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Tokens.border.color).frame(height: 1)
+            HStack(spacing: 12) {
+                Image(.pencil, size: 14)
+                Text("Draft").font(.ui(14, .semibold))
+                Text("A reply you started").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                Spacer(minLength: 8)
+                ActionButton(title: "Open", variant: .outline) { store.openDraft(id) }
+            }
+            .foregroundStyle(Tokens.destructive.color)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+            .onTapGesture { store.openDraft(id) }
+        }
     }
 
     private var replies: some View {
@@ -90,21 +198,58 @@ struct ThreadScreen: View {
         }
         .padding(.top, 22)
     }
+
+    private func open(_ message: MessageItem, _ index: Int) {
+        Task {
+            guard let file = await store.openAttachment(message: message.id, index: index) else { return }
+            preview = file
+        }
+    }
+
+    private func save(_ message: MessageItem, _ index: Int) {
+        let name = message.attachments[index].name
+        Task {
+            guard let file = await store.openAttachment(message: message.id, index: index) else { return }
+            do {
+                saving = try await Self.copy(file, named: name)
+            } catch {
+                store.show(error.localizedDescription)
+            }
+        }
+    }
+
+    /// A copy to hand to the save panel, which moves it: the downloaded file stays where it is.
+    private static func copy(_ file: URL, named name: String) async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let copy = folder.appendingPathComponent(name.isEmpty ? file.lastPathComponent : name)
+            try FileManager.default.copyItem(at: file, to: copy)
+            return copy
+        }.value
+    }
 }
 
-/// One message of a thread.
+/// One message of a thread. Its sender opens the person; its files open in Quick Look.
 struct MessageCard: View {
+    @Environment(MailStore.self) private var store
     let message: MessageItem
     let folded: Bool
+    let showPerson: () -> Void
+    let open: (Int) -> Void
+    let save: (Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 Avatar(initials: message.initials, email: message.fromEmail, size: 34)
+                    .onTapGesture { if !folded { showPerson() } }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(message.fromName)
                         .font(.ui(14, folded ? .regular : .semibold))
                         .foregroundStyle(folded ? Tokens.mutedForeground.color : Tokens.foreground.color)
+                        .onTapGesture { if !folded { showPerson() } }
+                        .help(folded ? "" : message.fromEmail)
                     Text(folded ? message.snippet : message.to)
                         .font(.ui(12.5))
                         .foregroundStyle(Tokens.mutedForeground.color)
@@ -137,65 +282,19 @@ struct MessageCard: View {
     }
 
     private var attachments: some View {
-        HStack(spacing: 8) {
-            ForEach(message.attachments, id: \.self) { attachment in
-                HStack(spacing: 6) {
-                    Image(.paperclip, size: 12)
-                    Text(attachment.name).font(.ui(12)).lineLimit(1)
-                    Text(ByteCountFormatter.string(fromByteCount: attachment.size, countStyle: .file))
-                        .font(.ui(11)).foregroundStyle(Tokens.mutedForeground.color)
+        FlowLayout(spacing: 8) {
+            ForEach(Array(message.attachments.enumerated()), id: \.offset) { index, attachment in
+                Chip(
+                    title: attachment.name, symbol: .paperclip,
+                    detail: ByteCountFormatter.string(fromByteCount: attachment.size, countStyle: .file),
+                    pending: store.downloading.contains("\(message.id)/\(index)"), help: "Open \(attachment.name)",
+                    action: { open(index) }
+                )
+                .contextMenu {
+                    Button("Open") { open(index) }
+                    Button("Save…") { save(index) }
                 }
-                .padding(.horizontal, 10)
-                .frame(height: 26)
-                .background(Capsule().fill(Tokens.muted.color))
             }
         }
-    }
-}
-
-/// What can be done to the open thread: archive, trash, snooze, mark unread, spam.
-struct ThreadActions: View {
-    @Environment(MailStore.self) private var store
-    let thread: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            IconButton(symbol: .archive, help: "Archive (e)") { store.act(.archive, on: [thread]) }
-            IconButton(symbol: .trash, help: "Trash (#)") { store.act(.trash, on: [thread]) }
-            IconButton(symbol: .clock, help: "Snooze (h)") { store.snoozing = [thread] }
-            IconButton(symbol: .mail, help: "Mark unread (u)") { store.toggleRead(thread) }
-            IconButton(symbol: .shieldAlert, help: "Spam") { store.act(.spam, on: [thread]) }
-        }
-    }
-}
-
-/// When a snooze ends.
-struct SnoozePicker: View {
-    @Environment(MailStore.self) private var store
-    let threads: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Snooze until").font(.ui(13, .semibold)).foregroundStyle(Tokens.foreground.color).padding(.bottom, 6)
-            ForEach(SnoozeChoice.choices()) { choice in
-                Button {
-                    store.snoozing = nil
-                    store.act(.snooze, on: threads, until: choice.until)
-                } label: {
-                    HStack {
-                        Text(choice.name).font(.ui(14)).foregroundStyle(Tokens.foreground.color)
-                        Spacer()
-                        Text(choice.until.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
-                            .font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
-                    }
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            ActionButton(title: "Cancel", variant: .ghost) { store.snoozing = nil }.padding(.top, 6)
-        }
-        .padding(20)
-        .frame(minWidth: 280)
     }
 }

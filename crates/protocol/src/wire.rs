@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ops::Op;
-use crate::types::{Account, Body, Label, Message};
+use crate::types::{Account, Body, Label, Message, Preference, SavedDraft};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -40,6 +40,10 @@ pub enum ServerMessage {
         accounts: Vec<Account>,
         labels: Vec<Label>,
         messages: Vec<Message>,
+        #[serde(default)]
+        preferences: Vec<Preference>,
+        #[serde(default)]
+        drafts: Vec<SavedDraft>,
         cursor: i64,
         more: bool,
     },
