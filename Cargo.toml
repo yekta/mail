@@ -6,7 +6,7 @@ members = ["apps/server", "crates/protocol", "crates/core"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/yekta/mail"
+repository = "https://github.com/yekta/wonnet"
 
 [workspace.dependencies]
 mail-protocol = { path = "crates/protocol" }

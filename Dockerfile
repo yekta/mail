@@ -19,7 +19,7 @@ RUN cargo build --release -p mail-server \
     && rm -rf target
 
 FROM debian:bookworm-slim
-LABEL org.opencontainers.image.source=https://github.com/yekta/mail
+LABEL org.opencontainers.image.source=https://github.com/yekta/wonnet
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
