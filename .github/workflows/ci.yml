@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgres://mail:mail@localhost:5441/mail
+      STALWART_URL: http://localhost:8441
+      STALWART_ADMIN: admin:adminpass
+    steps:
+      - uses: actions/checkout@v4
+
+      # As compose.yaml has them. Postgres runs without fsync: the tests make a database each.
+      - name: Postgres and Stalwart
+        run: |
+          docker run -d --name postgres -p 5441:5432 \
+            -e POSTGRES_USER=mail -e POSTGRES_PASSWORD=mail -e POSTGRES_DB=mail \
+            postgres:18 -c max_connections=300 -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+          docker run -d --name stalwart -p 8441:8080 \
+            -e STALWART_RECOVERY_ADMIN=$STALWART_ADMIN -e STALWART_PUBLIC_URL=$STALWART_URL -e STALWART_HOSTNAME=localhost \
+            -v "$PWD/scripts/stalwart/config.json:/etc/stalwart/config.json:ro" \
+            stalwartlabs/stalwart:v0.16.25
+
+      - run: rustup update stable --no-self-update && rustup default stable && rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Wait for the services
+        run: |
+          for i in $(seq 1 60); do docker exec postgres pg_isready -U mail >/dev/null 2>&1 && break; sleep 1; done
+          for i in $(seq 1 60); do curl -fsS -u "$STALWART_ADMIN" "$STALWART_URL/jmap/session" >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS -u "$STALWART_ADMIN" "$STALWART_URL/jmap/session" >/dev/null || (docker logs stalwart; exit 1)
+
+      - run: cargo test --workspace
+
+  theme:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: The generated tokens are up to date
+        run: node packages/theme/build.mjs --check

@@ -1,0 +1,55 @@
+name: macOS
+
+# Builds the Mac app. macOS runners cost ten times as much on a private repository, so it only
+# runs when what the app is made of changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/macos/**
+      - packages/apple/**
+      - packages/theme/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/macos.yml
+  pull_request:
+    paths:
+      - apps/macos/**
+      - packages/apple/**
+      - packages/theme/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/macos.yml
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the app
+        run: apps/macos/scripts/build-app.sh
+
+      - name: Zip the app
+        run: ditto -c -k --keepParent apps/macos/build/Mail.app Mail.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mail-macOS
+          path: Mail.zip
+          retention-days: 7

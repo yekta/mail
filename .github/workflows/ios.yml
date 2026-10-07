@@ -1,0 +1,56 @@
+name: iOS
+
+# Builds the iOS app for the simulator. macOS runners cost ten times as much on a private
+# repository, so it only runs when what the app is made of changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/ios/**
+      - packages/apple/**
+      - packages/theme/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/ios.yml
+  pull_request:
+    paths:
+      - apps/ios/**
+      - packages/apple/**
+      - packages/theme/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/ios.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios-sim
+          brew install xcodegen
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate the project
+        working-directory: apps/ios
+        run: xcodegen generate
+
+      - name: Build for the simulator
+        working-directory: apps/ios
+        run: |
+          xcodebuild -project Mail.xcodeproj -scheme Mail \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO build | tail -40
+          test "${PIPESTATUS[0]}" -eq 0
