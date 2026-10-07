@@ -81,6 +81,8 @@ public final class MailStore {
     @ObservationIgnored private var toastAction: (() -> Void)?
     @ObservationIgnored private var searchRequest: UInt64 = 0
     @ObservationIgnored private var reloading = false
+    /// A change came while the list was being read: read it again after.
+    @ObservationIgnored private var staleWhileReloading = false
     @ObservationIgnored private var signIn: ASWebAuthenticationSession?
     @ObservationIgnored private let anchor = SignInAnchor()
 
@@ -163,13 +165,20 @@ public final class MailStore {
     }
 
     func reloadThreads() async {
-        guard !reloading else { return }
+        guard !reloading else {
+            staleWhileReloading = true
+            return
+        }
         reloading = true
-        defer { reloading = false }
-        let limit = max(200, rows.count)
-        guard let page = try? await bridge.call("threads", ["mailbox": mailbox, "limit": limit], as: ThreadPage.self) else { return }
-        rows = page.rows
-        total = page.total
+        repeat {
+            staleWhileReloading = false
+            let limit = max(200, rows.count)
+            if let page = try? await bridge.call("threads", ["mailbox": mailbox, "limit": limit], as: ThreadPage.self) {
+                rows = page.rows
+                total = page.total
+            }
+        } while staleWhileReloading
+        reloading = false
     }
 
     func loadMore() {
