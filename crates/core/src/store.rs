@@ -296,8 +296,10 @@ impl Store {
         if meta("schema").as_deref() == Some(SCHEMA_VERSION) {
             return Ok(Self { db, path: path.to_path_buf() });
         }
-        let kept: Vec<(&str, String)> =
-            ["server", "token"].into_iter().filter_map(|key| meta(key).map(|value| (key, value))).collect();
+        let kept: Vec<(&str, String)> = ["server", "server_chosen", "token"]
+            .into_iter()
+            .filter_map(|key| meta(key).map(|value| (key, value)))
+            .collect();
         // What the user did that the server doesn't have yet survives the rebuild.
         let outbox: Vec<(String, String, i64)> = db
             .prepare("SELECT op_id, op, created FROM outbox")

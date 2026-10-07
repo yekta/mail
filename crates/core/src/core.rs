@@ -97,7 +97,8 @@ pub fn start(config: Config, sink: Sink) -> Result<Handle> {
     if config.demo {
         crate::demo::fill(&mut store, mail_protocol::now_ms())?;
     }
-    if store.meta("server").is_none()
+    // The app's own server moves with the app; one the user picked stays.
+    if store.meta("server_chosen").is_none()
         && let Some(url) = &config.server_url
     {
         store.set_meta("server", Some(url))?;
@@ -461,6 +462,7 @@ impl Core {
         }
         self.forget()?;
         self.store.set_meta("server", Some(url))?;
+        self.store.set_meta("server_chosen", Some("1"))?;
         self.connect();
         Ok(json!({}))
     }
@@ -1509,6 +1511,50 @@ mod tests {
             let page = self.call(json!({ "type": "search", "query": subject })).await.unwrap();
             page["rows"][0]["id"].as_str().unwrap().to_string()
         }
+    }
+
+    #[tokio::test]
+    async fn the_apps_server_moves_with_the_app_but_a_chosen_one_stays() {
+        let data = tempfile::tempdir().unwrap();
+        let status = |server_url: &str| {
+            let config = Config {
+                data_dir: data.path().display().to_string(),
+                server_url: Some(server_url.into()),
+                demo: false,
+            };
+            let events: Arc<Mutex<Vec<Event>>> = Arc::default();
+            let sink = events.clone();
+            let handle = start(config, Arc::new(move |event| sink.lock().unwrap().push(event))).unwrap();
+            (handle, events)
+        };
+        let server = |events: &Arc<Mutex<Vec<Event>>>| {
+            events.lock().unwrap().iter().find_map(|event| match event {
+                Event::Reply { id: 1, value, .. } => Some(value["server"].clone()),
+                _ => None,
+            })
+        };
+        let ask = async |handle: &Handle, events: &Arc<Mutex<Vec<Event>>>| {
+            handle.send(1, Command::Status);
+            for _ in 0..200 {
+                if let Some(found) = server(events) {
+                    return found;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("no answer");
+        };
+
+        let (handle, events) = status("https://old.example");
+        assert_eq!(ask(&handle, &events).await, "https://old.example");
+        drop(handle);
+        let (handle, events) = status("https://new.example");
+        assert_eq!(ask(&handle, &events).await, "https://new.example");
+
+        handle.send(2, Command::SetServer { url: "https://mine.example".into() });
+        drop(handle);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let (handle, events) = status("https://new.example");
+        assert_eq!(ask(&handle, &events).await, "https://mine.example");
     }
 
     #[tokio::test]
