@@ -17,7 +17,7 @@ pub enum Op {
     AddLabel { ids: Vec<String>, label: String },
     RemoveLabel { ids: Vec<String>, label: String },
     Snooze { ids: Vec<String>, until: i64 },
-    Send { draft: Draft, send_at: i64 },
+    Send { draft: Box<Draft>, send_at: i64 },
     CancelSend { op_id: String },
     RemoveAccount { account_id: String },
 }

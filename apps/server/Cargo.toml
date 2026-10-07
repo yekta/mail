@@ -1,0 +1,32 @@
+[package]
+name = "mail-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mail-protocol = { workspace = true, features = ["tls"] }
+aes-gcm = "0.11"
+anyhow.workspace = true
+axum = { version = "0.8", features = ["macros", "ws"] }
+base64.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+mail-builder.workspace = true
+mail-parser.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "chrono", "uuid", "json"] }
+tokio.workspace = true
+tower-http = { version = "0.7", features = ["trace", "set-header"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+mail-core.workspace = true
+tempfile.workspace = true
