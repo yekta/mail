@@ -15,7 +15,7 @@ struct ThreadListIOS: UIViewRepresentable {
         let table = UITableView(frame: .zero, style: .plain)
         table.register(ThreadCell.self, forCellReuseIdentifier: ThreadCell.identifier)
         table.rowHeight = Theme.iosRowHeight
-        table.separatorInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 0)
+        table.separatorInset = .zero
         table.separatorColor = Tokens.border.platform
         table.backgroundColor = Tokens.card.platform
         table.dataSource = context.coordinator
@@ -136,6 +136,8 @@ private final class RowCanvas: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let row, let text else { return }
+        Theme.accountColor(row.color).platform.setFill()
+        UIRectFill(CGRect(x: 0, y: 0, width: Theme.accountBarWidth, height: bounds.height))
         let left: CGFloat = 16
         let right = bounds.width - 16
         let star = CGRect(x: right - 18, y: 14, width: 18, height: 18)

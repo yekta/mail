@@ -135,7 +135,7 @@ final class HoverTableView: NSTableView {
     }
 }
 
-/// One thread on one line: unread dot, senders, subject and snippet, date, star.
+/// One thread on one line: the account's bar, unread dot, senders, subject and snippet, date, star.
 final class ThreadRowView: NSTableRowView {
     enum Hit {
         case star, archive, trash, snooze, read, none
@@ -183,12 +183,12 @@ final class ThreadRowView: NSTableRowView {
         let fill = isCurrent || hovering ? Tokens.accent.platform : Tokens.card.platform
         fill.setFill()
         bounds.fill()
-        if isCurrent {
-            Tokens.primary.platform.setFill()
-            NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
-        }
         Tokens.border.platform.setFill()
-        NSRect(x: 20, y: bounds.maxY - 1, width: bounds.width - 40, height: 1).fill()
+        NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
+        if let row {
+            Theme.accountColor(row.color).platform.setFill()
+            NSRect(x: 0, y: 0, width: Theme.accountBarWidth, height: bounds.height).fill()
+        }
     }
 
     override func drawSelection(in dirtyRect: NSRect) {}
