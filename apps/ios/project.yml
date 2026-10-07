@@ -1,0 +1,53 @@
+# The iOS app's Xcode project: `xcodegen` makes Mail.xcodeproj from this file.
+name: Mail
+options:
+  bundleIdPrefix: com.yekta.mail
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  MailUI:
+    path: ../../packages/apple
+targets:
+  Mail:
+    type: application
+    platform: iOS
+    sources:
+      - Mail
+    dependencies:
+      - package: MailUI
+    preBuildScripts:
+      - name: Build the core
+        script: '"$SRCROOT/scripts/build-core.sh"'
+        basedOnDependencyAnalysis: false
+    info:
+      path: Mail/Info.plist
+      properties:
+        CFBundleDisplayName: Mail
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.yekta.mail.auth
+            CFBundleURLSchemes: [mailapp]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        MailServerURL: $(MAIL_SERVER_URL)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yekta.mail.ios
+        PRODUCT_NAME: Mail
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        MAIL_SERVER_URL: http://localhost:3000
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": $(SRCROOT)/../../target/aarch64-apple-ios/release
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]": $(SRCROOT)/../../target/aarch64-apple-ios-sim/release
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        OTHER_LDFLAGS: [-lmail_core, -framework, Security, -framework, SystemConfiguration, -framework, CoreFoundation, -liconv]

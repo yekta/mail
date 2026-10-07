@@ -12,3 +12,4 @@ xcuserdata/
 DerivedData/
 node_modules/
 /.claude/
+/apps/ios/Mail/Info.plist
