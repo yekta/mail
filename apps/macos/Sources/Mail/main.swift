@@ -1,0 +1,3 @@
+import MailUI
+
+MailMacApp.main()
