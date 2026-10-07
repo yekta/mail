@@ -1,0 +1,137 @@
+name: Release
+
+# On every push to main that touches the apps: signs and notarizes the Mac app and publishes it as
+# a GitHub release, and uploads the iOS app to TestFlight. The version is the one
+# scripts/release-version.sh gives the commit.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/macos/**
+      - apps/ios/**
+      - packages/apple/**
+      - packages/theme/**
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - scripts/release-version.sh
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        run: echo "VERSION=$(scripts/release-version.sh)" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Import the signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+      - name: Build and sign the app
+        env:
+          MAIL_SIGN_IDENTITY: Developer ID Application
+        run: apps/macos/scripts/build-app.sh
+
+      - name: Notarize the app
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          echo "$APPLE_API_KEY" > "$RUNNER_TEMP/api-key.p8"
+          CREDENTIALS=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
+          ditto -c -k --keepParent apps/macos/build/Wonnet.app "$RUNNER_TEMP/notarize.zip"
+          SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --output-format json | jq -r .id)"
+          STATUS=0
+          xcrun notarytool wait "$SUBMISSION" "${CREDENTIALS[@]}" --timeout 30m || STATUS=$?
+          xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}" || true
+          [ "$STATUS" -eq 0 ] || exit "$STATUS"
+          xcrun stapler staple apps/macos/build/Wonnet.app
+          spctl --assess --type execute --verbose apps/macos/build/Wonnet.app
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ditto -c -k --keepParent apps/macos/build/Wonnet.app Wonnet.zip
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v$VERSION" \
+            --generate-notes Wonnet.zip
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        run: scripts/release-version.sh
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios
+          brew install xcodegen
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Import the signing certificate
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$IOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+      - name: Upload to TestFlight
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+          IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: apps/ios/scripts/testflight.sh

@@ -25,7 +25,7 @@ Production is the `Wonnet` project on Unbind:
 
 | Service | Address | What it runs |
 | --- | --- | --- |
-| `Server` | https://server-w7vzr5ga782d.unbind.yekta.cc | The server, built from `Dockerfile` on every push to `main` that touches it |
+| `Server` | https://api.wonnet.app | The server, built from `Dockerfile` on every push to `main` that touches it |
 | `Marketing` | https://wonnet.app | The marketing site, built from `apps/marketing/Dockerfile` on every push to `main` that touches it |
 | `Postgres` | | The server's database |
 
@@ -144,7 +144,7 @@ from the apps' tokens. The screenshots come from `docs/screenshots`; the favicon
 ### apps/macos and apps/ios
 
 - `apps/macos`: a SwiftPM executable and `scripts/build-app.sh`, which builds the core and the
-  app into `build/Mail.app`. `Resources/AppIcon.icon` is the icon of both apps, made in Icon
+  app into `build/Wonnet.app`. `Resources/AppIcon.icon` is the icon of both apps, made in Icon
   Composer: the W in black on a light tile, white on a dark one in dark mode.
 - `apps/ios`: `project.yml` for XcodeGen; the Xcode project is generated, never committed.
   `scripts/build-core.sh` builds the core for the platform Xcode builds for.
@@ -186,7 +186,7 @@ Xcode; the iOS app also XcodeGen and `rustup target add aarch64-apple-ios aarch6
     cargo run -p mail-core --example drive        # the core, driven from a terminal
     cd apps/marketing && pnpm install && pnpm dev # the marketing site
     apps/macos/scripts/build-app.sh --open        # the Mac app
-    open apps/macos/build/Mail.app --args --demo  # the Mac app with made-up mail, no server
+    open apps/macos/build/Wonnet.app --args --demo  # the Mac app with made-up mail, no server
     cd apps/ios && xcodegen generate && open Mail.xcodeproj
 
 Checks (`cargo test` needs the compose services; it makes a throwaway database per test, and
@@ -197,8 +197,10 @@ the Stalwart test runs when `STALWART_URL` is set):
     node packages/theme/build.mjs --check
     cd apps/marketing && pnpm check && pnpm build
 
-The `macOS` and `iOS` workflows only run when the apps, the Apple kit, the theme or the crates
-change: macOS runners cost ten times as much on a private repository.
+The `macOS` and `iOS` workflows build the apps on pull requests that change them. On `main`,
+`release.yml` signs and notarizes the Mac app and publishes it as a GitHub release, and uploads the
+iOS app to TestFlight (`apps/ios/scripts/testflight.sh`). Its signing secrets and the
+`APPLE_TEAM_ID` and `IOS_BUNDLE_ID` variables are set on the repository.
 
 ## Commit Messages
 

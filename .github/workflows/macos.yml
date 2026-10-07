@@ -1,17 +1,8 @@
 name: macOS
 
-# Builds the Mac app. macOS runners cost ten times as much on a private repository, so it only
-# runs when what the app is made of changes.
+# Builds the Mac app, on pull requests that change what the app is made of. Main is built,
+# notarized and published by release.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - apps/macos/**
-      - packages/apple/**
-      - packages/theme/**
-      - crates/**
-      - Cargo.lock
-      - .github/workflows/macos.yml
   pull_request:
     paths:
       - apps/macos/**
@@ -46,10 +37,10 @@ jobs:
         run: apps/macos/scripts/build-app.sh
 
       - name: Zip the app
-        run: ditto -c -k --keepParent apps/macos/build/Mail.app Mail.zip
+        run: ditto -c -k --keepParent apps/macos/build/Wonnet.app Wonnet.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Mail-macOS
-          path: Mail.zip
+          name: Wonnet-macOS
+          path: Wonnet.zip
           retention-days: 7

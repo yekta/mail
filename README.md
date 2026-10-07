@@ -18,7 +18,7 @@ These are its programs:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
-| Mail.app (`apps/macos`) | Your Mac | The interface |
+| Wonnet.app (`apps/macos`) | Your Mac | The interface |
 | Mail for iOS (`apps/ios`) | Your iPhone and iPad | The interface |
 | `mail-server` (`apps/server`) | A server, beside Postgres | Signs you in, syncs your accounts with their providers, sends, snoozes and searches |
 
@@ -68,7 +68,7 @@ In Testing mode, Google ends a refresh token after **7 days**: the account then 
 apps/macos/scripts/build-app.sh --open
 ```
 
-The apps start on our server, `https://server-w7vzr5ga782d.unbind.yekta.cc`. `MAIL_SERVER_URL=http://localhost:3000 apps/macos/scripts/build-app.sh` builds one that starts on your own, and the server can be changed under **Advanced** on the first screen.
+The apps start on our server, `https://api.wonnet.app`. `MAIL_SERVER_URL=http://localhost:3000 apps/macos/scripts/build-app.sh` builds one that starts on your own, and the server can be changed under **Advanced** on the first screen.
 
 ```sh
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
@@ -77,7 +77,7 @@ cd apps/ios && xcodegen generate && open Mail.xcodeproj
 
 Xcode builds the core for the iOS app itself. Set your team under Signing to run it on a device, and `MAIL_SERVER_URL` in `project.yml` for another server.
 
-To look at the apps without a server or an account, start them with `--demo`: they show made-up mail, kept apart from your own and made fresh at every start. On the Mac, `open apps/macos/build/Mail.app --args --demo`; on iOS, add `--demo` to the scheme's arguments in Xcode.
+To look at the apps without a server or an account, start them with `--demo`: they show made-up mail, kept apart from your own and made fresh at every start. On the Mac, `open apps/macos/build/Wonnet.app --args --demo`; on iOS, add `--demo` to the scheme's arguments in Xcode.
 
 ### 4. Add an account
 

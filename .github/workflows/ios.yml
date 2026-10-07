@@ -1,18 +1,8 @@
 name: iOS
 
-# Builds the iOS app for the simulator. macOS runners cost ten times as much on a private
-# repository, so it only runs when what the app is made of changes.
+# Builds the iOS app for the simulator, on pull requests that change what the app is made of.
+# Main is built and sent to TestFlight by release.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - apps/ios/**
-      - apps/macos/Resources/**
-      - packages/apple/**
-      - packages/theme/**
-      - crates/**
-      - Cargo.lock
-      - .github/workflows/ios.yml
   pull_request:
     paths:
       - apps/ios/**

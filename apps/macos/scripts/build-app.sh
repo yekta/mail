@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Builds Mail.app into apps/macos/build. Needs Xcode and Rust.
+# Builds Wonnet.app into apps/macos/build. Needs Xcode and Rust.
 #
 #   scripts/build-app.sh [--open]
 #
-# MAIL_SERVER_URL, if set, is the server a new install uses (default https://server-w7vzr5ga782d.unbind.yekta.cc).
+# MAIL_SERVER_URL, if set, is the server a new install uses (default https://api.wonnet.app).
 # MAIL_SIGN_IDENTITY, if set, is the Developer ID certificate the app is signed with.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(cd ../.. && pwd)"
-APP="build/Mail.app"
+APP="build/Wonnet.app"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
 
 echo "▸ Building the core…"
@@ -43,8 +43,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>Mail</string>
-    <key>CFBundleDisplayName</key><string>Mail</string>
+    <key>CFBundleName</key><string>Wonnet</string>
+    <key>CFBundleDisplayName</key><string>Wonnet</string>
     <key>CFBundleExecutable</key><string>Mail</string>
     <key>CFBundleIdentifier</key><string>com.yekta.mail.mac</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -62,7 +62,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>CFBundleURLName</key><string>com.yekta.mail.auth</string>
         <key>CFBundleURLSchemes</key><array><string>mailapp</string></array>
     </dict></array>
-    <key>MailServerURL</key><string>${MAIL_SERVER_URL:-https://server-w7vzr5ga782d.unbind.yekta.cc}</string>
+    <key>MailServerURL</key><string>${MAIL_SERVER_URL:-https://api.wonnet.app}</string>
 </dict>
 </plist>
 PLIST
