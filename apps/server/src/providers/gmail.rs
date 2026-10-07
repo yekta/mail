@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::{Batch, Reauth, Synced, unescape};
+use super::{Batch, Reauth, Synced, one_line, unescape};
 use crate::db::{self, AccountRow, RemoteMessage};
 use crate::{AppState, mime};
 
@@ -425,7 +425,7 @@ fn remote(message: GmailMessage, labels: &HashMap<String, Uuid>) -> RemoteMessag
         from: headers.from,
         recipients: headers.recipients,
         subject: headers.subject,
-        snippet: unescape(&message.snippet),
+        snippet: one_line(&unescape(&message.snippet)),
         date,
         unread,
         starred,

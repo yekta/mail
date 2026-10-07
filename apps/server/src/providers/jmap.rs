@@ -8,9 +8,10 @@ use std::sync::Arc;
 use mail_protocol::{Address, Attachment, Draft, Op, Recipients, role};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-use super::{Batch, Reauth, Synced};
+use super::{Batch, Reauth, Synced, one_line};
 use crate::db::{self, AccountRow, RemoteMessage};
 use crate::{AppState, mime};
 
@@ -49,6 +50,8 @@ pub struct Login {
 pub struct Jmap {
     http: reqwest::Client,
     session: Arc<Session>,
+    /// The server says how many requests it takes at once; more are refused.
+    permits: Arc<Semaphore>,
 }
 
 struct Session {
@@ -115,8 +118,10 @@ impl Jmap {
         }
         let origin_text = origin.origin().ascii_serialization();
         let resolve = |value: String| if value.starts_with('/') { format!("{origin_text}{value}") } else { value };
+        let concurrent = session["capabilities"][CORE]["maxConcurrentRequests"].as_u64().unwrap_or(4).clamp(1, 16);
         Ok(Self {
             http: http.clone(),
+            permits: Arc::new(Semaphore::new(concurrent as usize)),
             session: Arc::new(Session {
                 authorization,
                 api_url: resolve(text("apiUrl")),
@@ -152,6 +157,7 @@ impl Jmap {
                 json!([name, arguments, index.to_string()])
             })
             .collect();
+        let _permit = self.permits.acquire().await?;
         let response = self
             .http
             .post(&self.session.api_url)
@@ -180,6 +186,7 @@ impl Jmap {
 
     pub async fn upload(&self, raw: Vec<u8>) -> anyhow::Result<String> {
         let url = self.session.upload_url.replace("{accountId}", &self.session.account_id);
+        let _permit = self.permits.acquire().await?;
         let response = self
             .http
             .post(url)
@@ -430,6 +437,7 @@ impl Jmap {
             .replace("{blobId}", blob)
             .replace("{name}", "message.eml")
             .replace("{type}", "message/rfc822");
+        let _permit = self.permits.acquire().await?;
         let response =
             self.http.get(url).header("Authorization", &self.session.authorization).send().await?.error_for_status()?;
         Ok(response.bytes().await?.to_vec())
@@ -547,7 +555,7 @@ fn remote(email: &Value, mailboxes: &Mailboxes) -> RemoteMessage {
             reply_to: addresses(&email["replyTo"]),
         },
         subject: email["subject"].as_str().unwrap_or_default().to_string(),
-        snippet: email["preview"].as_str().unwrap_or_default().to_string(),
+        snippet: one_line(email["preview"].as_str().unwrap_or_default()),
         date,
         unread: email["keywords"]["$seen"] != true,
         starred: email["keywords"]["$flagged"] == true,

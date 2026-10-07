@@ -95,6 +95,11 @@ impl Connection {
     }
 }
 
+/// A snippet on one line, with its whitespace collapsed.
+pub fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Gmail's snippets come HTML-escaped.
 pub fn unescape(text: &str) -> String {
     if !text.contains('&') {
