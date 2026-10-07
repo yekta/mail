@@ -34,6 +34,8 @@ use crate::config::Config;
 pub struct Inner {
     pub config: Config,
     pub db: sqlx::PgPool,
+    /// What runs in the background (LISTEN, the scheduler) has connections of its own.
+    pub background: sqlx::PgPool,
     pub http: reqwest::Client,
     pub sealer: seal::Sealer,
     pub hub: hub::Hub,
@@ -94,6 +96,10 @@ async fn start_background(state: &AppState) {
     });
 }
 
+fn background_pool(db: &sqlx::PgPool) -> sqlx::PgPool {
+    PgPoolOptions::new().max_connections(3).connect_lazy_with((*db.connect_options()).clone())
+}
+
 fn http_client() -> reqwest::Client {
     reqwest::Client::builder().timeout(Duration::from_secs(60)).build().expect("HTTP client")
 }
@@ -137,6 +143,7 @@ async fn main() {
     let state = Arc::new(Inner {
         sealer: seal::Sealer::new(&config.secret_key),
         config,
+        background: background_pool(&db),
         db,
         http: http_client(),
         hub: Default::default(),

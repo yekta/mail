@@ -74,6 +74,7 @@ impl Server {
         let state = Arc::new(Inner {
             sealer: seal::Sealer::new(&config.secret_key),
             config,
+            background: crate::background_pool(&db),
             db,
             http: reqwest::Client::new(),
             hub: Default::default(),
@@ -123,6 +124,7 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.state.stopping.send_replace(true);
+        self.state.workers.stop_all();
     }
 }
 

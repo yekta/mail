@@ -45,8 +45,7 @@ pub async fn notify_ops(db: &PgPool, account_id: Uuid) {
 /// Listens on a connection of its own, outside the pool the requests use.
 pub fn listen(state: AppState) {
     tokio::spawn(async move {
-        let options = (*state.db.connect_options()).clone();
-        let pool = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect_lazy_with(options);
+        let pool = state.background.clone();
         let mut stopping = state.stopping.subscribe();
         loop {
             tokio::select! {

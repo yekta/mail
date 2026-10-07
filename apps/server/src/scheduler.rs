@@ -13,8 +13,12 @@ use crate::{AppState, hub};
 pub fn start(state: AppState) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(500));
+        let stopping = state.stopping.subscribe();
         loop {
             interval.tick().await;
+            if *stopping.borrow() {
+                return;
+            }
             if let Err(error) = wake_snoozed(&state).await {
                 tracing::warn!("couldn't bring back snoozed mail: {error}");
             }
@@ -26,13 +30,14 @@ pub fn start(state: AppState) {
 }
 
 async fn wake_snoozed(state: &AppState) -> sqlx::Result<()> {
+    let db = &state.background;
     let users: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT user_id FROM messages WHERE snoozed_until <= now() AND NOT deleted LIMIT 100",
     )
-    .fetch_all(&state.db)
+    .fetch_all(db)
     .await?;
     for user_id in users {
-        let mut tx = UserTx::begin(&state.db, user_id).await?;
+        let mut tx = UserTx::begin(db, user_id).await?;
         let rows: Vec<MessageRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT {MESSAGE_COLUMNS} FROM messages
              WHERE user_id = $1 AND snoozed_until <= now() AND NOT deleted FOR UPDATE SKIP LOCKED"
@@ -61,7 +66,7 @@ async fn wake_snoozed(state: &AppState) -> sqlx::Result<()> {
         tx.commit().await?;
         accounts.dedup();
         for account_id in accounts {
-            hub::notify_ops(&state.db, account_id).await;
+            hub::notify_ops(db, account_id).await;
         }
     }
     Ok(())
@@ -74,7 +79,7 @@ async fn send_due(state: &AppState) -> sqlx::Result<()> {
              ORDER BY send_at LIMIT 20 FOR UPDATE SKIP LOCKED)
          RETURNING id, user_id, account_id, draft",
     )
-    .fetch_all(&state.db)
+    .fetch_all(&state.background)
     .await?;
     for (id, user_id, account_id, draft) in due {
         let state = state.clone();

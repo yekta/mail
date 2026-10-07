@@ -62,6 +62,12 @@ impl Workers {
         }
     }
 
+    pub fn stop_all(&self) {
+        for (_, worker) in self.running.lock().unwrap().drain() {
+            worker.task.abort();
+        }
+    }
+
     pub fn wake(&self, account_id: Uuid) {
         if let Some(worker) = self.running.lock().unwrap().get(&account_id) {
             worker.wake.notify_one();
