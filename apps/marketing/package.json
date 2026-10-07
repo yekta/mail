@@ -12,6 +12,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "icons": "node scripts/icons.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {
