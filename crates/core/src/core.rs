@@ -47,7 +47,10 @@ impl Handle {
 pub fn start(config: Config, sink: Sink) -> Result<Handle> {
     mail_protocol::tls::install();
     std::fs::create_dir_all(&config.data_dir)?;
-    let store = Store::open(&Path::new(&config.data_dir).join("mail.db"))?;
+    let mut store = Store::open(&Path::new(&config.data_dir).join("mail.db"))?;
+    if config.demo {
+        crate::demo::fill(&mut store, mail_protocol::now_ms())?;
+    }
     if store.meta("server").is_none()
         && let Some(url) = &config.server_url
     {
@@ -57,6 +60,7 @@ pub fn start(config: Config, sink: Sink) -> Result<Handle> {
     let http = reqwest::Client::builder().timeout(Duration::from_secs(30)).build()?;
     let mut core = Core {
         store,
+        demo: config.demo,
         sink,
         tx: tx.clone(),
         http,
@@ -80,6 +84,8 @@ pub fn start(config: Config, sink: Sink) -> Result<Handle> {
 
 struct Core {
     store: Store,
+    /// Shows the demo's mail and never connects.
+    demo: bool,
     sink: Sink,
     tx: mpsc::UnboundedSender<Input>,
     http: reqwest::Client,
@@ -162,6 +168,10 @@ impl Core {
             self.set_connection("signed_out", None);
             return;
         };
+        if self.demo {
+            self.set_connection("online", None);
+            return;
+        }
         self.generation += 1;
         let generation = self.generation;
         let tx = self.tx.clone();

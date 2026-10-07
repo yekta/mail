@@ -8,36 +8,46 @@ struct ThreadScreen: View {
     @State private var unfolded: Set<String> = []
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                ForEach(conversation.messages) { message in
-                    let folded = message.folded && !unfolded.contains(message.id)
-                    MessageCard(message: message, folded: folded)
-                        .contentShape(Rectangle())
-                        .onTapGesture { if folded { unfolded.insert(message.id) } }
-                    if message.id != conversation.messages.last?.id {
-                        Rectangle().fill(Tokens.border.color).frame(height: 1)
-                    }
-                }
-                if conversation.messages.contains(where: \.blockedImages) {
-                    ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
-                        .padding(.top, 8)
-                }
-                replies
+        GeometryReader { window in
+            ScrollView {
+                page
+                    #if os(macOS)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
+                    #endif
+                    .frame(maxWidth: .infinity, minHeight: window.size.height, alignment: .top)
+                    #if os(macOS)
+                    // The page around the card: a click there closes the thread, as Newton's did.
+                    .background { Tokens.background.color.onTapGesture(perform: store.close) }
+                    #endif
             }
-            .padding(.horizontal, pagePadding)
-            .padding(.vertical, 28)
-            .frame(maxWidth: Theme.cardWidth)
-            .background(Tokens.card.color)
-            #if os(macOS)
-            .padding(.top, 16)
-            .padding(.horizontal, 24)
-            #endif
-            .frame(maxWidth: .infinity)
         }
         .background(Tokens.background.color)
         .id(conversation.id)
+    }
+
+    private var page: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            ForEach(conversation.messages) { message in
+                let folded = message.folded && !unfolded.contains(message.id)
+                MessageCard(message: message, folded: folded)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if folded { unfolded.insert(message.id) } }
+                if message.id != conversation.messages.last?.id {
+                    Rectangle().fill(Tokens.border.color).frame(height: 1)
+                }
+            }
+            if conversation.messages.contains(where: \.blockedImages) {
+                ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
+                    .padding(.top, 8)
+            }
+            replies
+        }
+        .padding(.horizontal, pagePadding)
+        .padding(.vertical, 28)
+        .frame(maxWidth: Theme.cardWidth)
+        .background(Tokens.card.color)
     }
 
     private var pagePadding: CGFloat {

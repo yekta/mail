@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 
-/// The Mac app: the sidebar on the left and, beside it, the list or the open thread.
+/// The Mac app: the list or the open thread, with the sidebar sliding over them from the left.
 public struct MailMacApp: App {
     @State private var store = MailStore()
 
@@ -34,6 +34,7 @@ struct MacRoot: View {
     @Environment(MailStore.self) private var store
     @State private var settings = false
     @State private var focusSearch = 0
+    @State private var sidebarOpen = false
 
     var body: some View {
         @Bindable var store = store
@@ -41,17 +42,12 @@ struct MacRoot: View {
             if !store.signedIn {
                 OnboardingView().overlay(alignment: .bottom) { ToastView() }
             } else {
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: 38)
-                        SidebarView(showSettings: { settings = true })
-                    }
-                    .background(Tokens.sidebar.color)
-                    .frame(width: Theme.sidebarWidth)
+                ZStack(alignment: .leading) {
                     content
+                    if sidebarOpen { sidebar }
                 }
                 .overlay(alignment: .bottom) { ToastView() }
-                .background(KeyHandler(focusSearch: { focusSearch += 1 }))
+                .background(KeyHandler(focusSearch: { focusSearch += 1 }, sidebarOpen: $sidebarOpen))
             }
         }
         .frame(minWidth: 860, minHeight: 520)
@@ -63,6 +59,32 @@ struct MacRoot: View {
         .sheet(isPresented: $settings) { SettingsView().environment(store) }
     }
 
+    /// Over the page, without moving it; a click beside it closes it.
+    @ViewBuilder private var sidebar: some View {
+        Tokens.overlay.color.opacity(0.15)
+            .contentShape(Rectangle())
+            .onTapGesture { showSidebar(false) }
+            .transition(.opacity)
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 38)
+            SidebarView(
+                showSettings: {
+                    showSidebar(false)
+                    settings = true
+                },
+                picked: { _ in showSidebar(false) }
+            )
+        }
+        .frame(width: Theme.sidebarWidth)
+        .background(Tokens.sidebar.color)
+        .overlay(alignment: .trailing) { Rectangle().fill(Tokens.sidebarBorder.color).frame(width: 1) }
+        .transition(.move(edge: .leading))
+    }
+
+    private func showSidebar(_ open: Bool) {
+        withAnimation(.easeOut(duration: 0.2)) { sidebarOpen = open }
+    }
+
     private var content: some View {
         VStack(spacing: 0) {
             Text(store.conversation == nil ? store.mailboxName : "")
@@ -71,7 +93,7 @@ struct MacRoot: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 .allowsHitTesting(false)
-            MacTopBar(focusSearch: focusSearch)
+            MacTopBar(focusSearch: focusSearch, showSidebar: { showSidebar(true) })
             Rectangle().fill(Tokens.border.color).frame(height: 1)
             ZStack {
                 Tokens.background.color
@@ -96,11 +118,13 @@ struct MacRoot: View {
 struct MacTopBar: View {
     @Environment(MailStore.self) private var store
     let focusSearch: Int
+    let showSidebar: () -> Void
     @FocusState private var searching: Bool
     @State private var query = ""
 
     var body: some View {
         HStack(spacing: 12) {
+            IconButton(symbol: .menu, help: "Mailboxes", circled: false, action: showSidebar)
             if let open = store.conversation {
                 IconButton(symbol: .arrowLeft, help: "Back (Esc)") { store.close() }
                 Spacer()
@@ -163,10 +187,11 @@ struct EmptyList: View {
 }
 
 /// Newton's single keys: j/k to move, e archive, s star, # trash, u unread, h snooze, r reply,
-/// a reply all, f forward, c compose, / search. Ignored while typing or with a sheet open.
+/// a reply all, f forward, c compose, / search, Esc back. Ignored while typing or with a sheet open.
 private struct KeyHandler: NSViewRepresentable {
     @Environment(MailStore.self) private var store
     let focusSearch: () -> Void
+    @Binding var sidebarOpen: Bool
 
     final class Coordinator {
         var monitor: Any?
@@ -177,11 +202,16 @@ private struct KeyHandler: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let store = store
         let focusSearch = focusSearch
+        let sidebarOpen = $sidebarOpen
         context.coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let typing = NSApp.keyWindow?.firstResponder is NSText
             let sheetOpen = store.compose != nil || store.snoozing != nil || NSApp.keyWindow?.attachedSheet != nil
             let modified = !event.modifierFlags.intersection([.command, .control, .option]).isEmpty
             guard !typing, !sheetOpen, !modified else { return event }
+            if event.keyCode == 53, sidebarOpen.wrappedValue {
+                withAnimation(.easeOut(duration: 0.2)) { sidebarOpen.wrappedValue = false }
+                return nil
+            }
             return MainActor.assumeIsolated { handle(event, store: store, focusSearch: focusSearch) } ? nil : event
         }
         return NSView()

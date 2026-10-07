@@ -13,6 +13,9 @@ pub struct Config {
     /// The server to use until the user sets another.
     #[serde(default)]
     pub server_url: Option<String>,
+    /// Made-up mail instead of the server's, for looking at the apps.
+    #[serde(default)]
+    pub demo: bool,
 }
 
 #[derive(Debug, Deserialize)]
