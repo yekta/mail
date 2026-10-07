@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = ["apps/server", "crates/protocol", "crates/core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/yekta/mail"
+
+[workspace.dependencies]
+mail-protocol = { path = "crates/protocol" }
+mail-core = { path = "crates/core" }
+anyhow = "1"
+base64 = "0.23"
+chrono = { version = "0.4", features = ["serde"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hex = "0.4"
+mail-builder = "1.0"
+mail-parser = "0.11"
+# No TLS provider of its own: `mail_protocol::tls::install` picks ring.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+getrandom = "0.3"
+
+[profile.release]
+strip = true
+lto = "thin"

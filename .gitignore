@@ -1,0 +1,14 @@
+.DS_Store
+/target
+.env
+/apps/macos/.build
+/apps/macos/build
+/apps/macos/.swiftpm
+/apps/ios/build
+/apps/ios/Mail.xcodeproj
+/packages/apple/.build
+/packages/apple/.swiftpm
+xcuserdata/
+DerivedData/
+node_modules/
+/.claude/
