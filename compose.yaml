@@ -1,0 +1,33 @@
+# Local services for development and tests: docker compose up -d
+#
+# Postgres on localhost:5441 (without fsync: it holds nothing worth keeping) and Stalwart, a mail
+# server with JMAP, on localhost:8441. `cargo run -p mail-server -- seed` gives Stalwart a demo
+# user, demo@example.com, with a few hundred messages.
+services:
+  postgres:
+    image: postgres:18
+    command: postgres -c max_connections=300 -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+    environment:
+      POSTGRES_USER: mail
+      POSTGRES_PASSWORD: mail
+      POSTGRES_DB: mail
+    ports:
+      - "5441:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16.25
+    environment:
+      STALWART_RECOVERY_ADMIN: admin:adminpass
+      STALWART_PUBLIC_URL: http://localhost:8441
+      STALWART_HOSTNAME: localhost
+    ports:
+      - "8441:8080"
+    volumes:
+      - ./scripts/stalwart/config.json:/etc/stalwart/config.json:ro
+      - stalwart:/var/lib/stalwart
+
+volumes:
+  postgres:
+  stalwart:

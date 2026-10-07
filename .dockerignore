@@ -1,0 +1,9 @@
+.git
+.github
+.env
+**/target
+**/node_modules
+apps/macos
+apps/ios
+packages/apple
+scripts

@@ -2,7 +2,7 @@
 //! hundred made-up messages, in threads, some read, starred or archived. For local work and the
 //! end-to-end tests.
 //!
-//! STALWART_URL (http://localhost:8080), STALWART_ADMIN (admin:adminpass), SEED_USER
+//! STALWART_URL (http://localhost:8441), STALWART_ADMIN (admin:adminpass), SEED_USER
 //! (demo@example.com), SEED_PASSWORD (quiet-harbor-lantern-42), SEED_COUNT (300).
 
 use std::env;
@@ -98,7 +98,7 @@ fn settings() -> Settings {
     let admin = var("STALWART_ADMIN", "admin:adminpass");
     let (name, secret) = admin.split_once(':').unwrap_or(("admin", ""));
     Settings {
-        url: var("STALWART_URL", "http://localhost:8080"),
+        url: var("STALWART_URL", "http://localhost:8441"),
         admin: (name.to_string(), secret.to_string()),
         user: var("SEED_USER", "demo@example.com"),
         password: var("SEED_PASSWORD", "quiet-harbor-lantern-42"),
