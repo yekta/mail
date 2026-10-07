@@ -67,14 +67,14 @@ In Testing mode, Google ends a refresh token after **7 days**: the account then 
 apps/macos/scripts/build-app.sh --open
 ```
 
-The Mac app starts on `http://localhost:3000`; `MAIL_SERVER_URL=https://mail.example.com apps/macos/scripts/build-app.sh` builds one that starts on another server, and the server can be changed under **Advanced** on the first screen.
+The apps start on our server, `https://server-w7vzr5ga782d.unbind.yekta.cc`. `MAIL_SERVER_URL=http://localhost:3000 apps/macos/scripts/build-app.sh` builds one that starts on your own, and the server can be changed under **Advanced** on the first screen.
 
 ```sh
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 cd apps/ios && xcodegen generate && open Mail.xcodeproj
 ```
 
-Xcode builds the core for the iOS app itself. Set your team under Signing to run it on a device, and `MAIL_SERVER_URL` in `project.yml` for its server.
+Xcode builds the core for the iOS app itself. Set your team under Signing to run it on a device, and `MAIL_SERVER_URL` in `project.yml` for another server.
 
 ### 4. Add an account
 

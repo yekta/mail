@@ -3,7 +3,7 @@
 #
 #   scripts/build-app.sh [--open]
 #
-# MAIL_SERVER_URL, if set, is the server a new install uses (default http://localhost:3000).
+# MAIL_SERVER_URL, if set, is the server a new install uses (default https://server-w7vzr5ga782d.unbind.yekta.cc).
 # MAIL_SIGN_IDENTITY, if set, is the Developer ID certificate the app is signed with.
 set -euo pipefail
 
@@ -63,7 +63,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>CFBundleURLName</key><string>com.yekta.mail.auth</string>
         <key>CFBundleURLSchemes</key><array><string>mailapp</string></array>
     </dict></array>
-    <key>MailServerURL</key><string>${MAIL_SERVER_URL:-http://localhost:3000}</string>
+    <key>MailServerURL</key><string>${MAIL_SERVER_URL:-https://server-w7vzr5ga782d.unbind.yekta.cc}</string>
 </dict>
 </plist>
 PLIST

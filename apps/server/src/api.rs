@@ -70,6 +70,9 @@ pub async fn add_jmap(
     let jmap = match Jmap::open(&state.http, &url, &username, &request.password).await {
         Ok(jmap) => jmap,
         Err(error) if error.is::<Reauth>() => return Err(AppError::unauthorized("The email or password is wrong.")),
+        Err(error) if error.is::<reqwest::Error>() => {
+            return Err(AppError::bad_request(format!("{url} can't be reached. Check the address.")));
+        }
         Err(error) => return Err(AppError::bad_request(format!("{error}"))),
     };
     let address = jmap.address().await.map_err(|error| AppError::bad_request(error.to_string()))?.email;

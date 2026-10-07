@@ -20,6 +20,18 @@ The first mail account added makes the user; later accounts join that user with 
 ticket. The server keeps each account's credentials sealed (AES-GCM with `SECRET_KEY`) and
 session tokens hashed. README.md covers how to set things up.
 
+Production is the `Mail` project on Unbind:
+
+| Service | Address | What it runs |
+| --- | --- | --- |
+| `Server` | https://server-w7vzr5ga782d.unbind.yekta.cc | The server, built from `Dockerfile` on every push to `main` that touches it |
+| `Postgres` | | The server's database |
+
+The server runs one replica: an account's worker must run in one place. Gmail needs
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set on the `Server` service. When a deploy changes
+required variables, deploy the code first and change the variables after: Unbind restarts the
+service on every variable change.
+
 ## Repo Structure:
 
 ### crates/protocol
