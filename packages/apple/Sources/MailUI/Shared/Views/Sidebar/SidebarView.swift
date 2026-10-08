@@ -69,7 +69,6 @@ struct SidebarView: View {
                 Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
             }
         }
-        .padding(.vertical, Space.xs + 2)
         .rule(.top)
     }
 }
