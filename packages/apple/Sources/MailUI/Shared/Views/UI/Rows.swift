@@ -91,7 +91,7 @@ struct NavRow<Trailing: View>: View {
             .padding(.trailing, Space.l)
             .frame(height: Theme.rowHeight * Platform.scale)
             .padding(.vertical, verticalPadding * Platform.scale)
-            .background(selected ? Tokens.accentLargerStronger.color : hovered ? Tokens.accentLarger.color : .clear)
+            .background(selected ? Tokens.accentStronger.color : hovered ? Tokens.accent.color : .clear)
             .contentShape(Rectangle())
         }
     }

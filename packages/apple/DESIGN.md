@@ -20,14 +20,14 @@ added to the component, not to the view.
 - Everything clickable has a hover state, shown at once: no animation on colours. A button's
   face reads `@Environment(\.hovered)`, set by `PressStyle`, which every button uses.
 - Hovered and selected things are filled from two pairs of tokens. Small things (buttons, tabs,
-  chips, segments) hover in `accent` and are selected in `accentStronger`. Large things (rows,
-  a banner) hover in `accentLarger` and are selected (or pressed, or highlighted) in
-  `accentLargerStronger`: the same steps dimmer, because a fill across a whole row reads
-  stronger than one behind a button. From dimmest to strongest they go `accentLarger`,
-  `accentLargerStronger`, `accent`, `accentStronger`, so a small thing's hover shows on a
-  selected row. An accent is never thinned with an opacity: if a step is missing, add a token
-  for it. A control with a colour of its own (the star) hovers in a wash of it: the colour at
-  `colorTintOpacity`, lighter in the dark scheme.
+  chips, segments, the sidebar's rows) hover in `accent` and are selected in `accentStronger`.
+  Large things (thread rows, choice rows, a banner) hover in `accentLarger` and are selected
+  (or pressed, or highlighted) in `accentLargerStronger`: the same steps dimmer, because a fill
+  across a whole row reads stronger than one behind a button. From dimmest to strongest they go
+  `accentLarger`, `accentLargerStronger`, `accent`, `accentStronger`, so a small thing's hover
+  shows on a selected row. An accent is never thinned with an opacity: if a step is missing, add
+  a token for it. A control with a colour of its own (the star) hovers in a wash of it: the
+  colour at `colorTintOpacity`, lighter in the dark scheme.
 - Things side by side have no gap between them: an `HStack(spacing: 0)` of buttons, rows with
   no spacing. The space is inside each control, so hover areas and hit areas touch. Buttons
   with a face (a circle, a pill) show `Theme.buttonGap` (2pt) between the faces; each button
