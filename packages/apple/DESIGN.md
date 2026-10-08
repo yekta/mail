@@ -18,7 +18,7 @@ added to the component, not to the view.
   face reads `@Environment(\.hovered)`, set by `PressStyle`, which every button uses. A control
   hovers in `accentStronger`, which shows on every surface, a hovered row (`accent`) included; a
   row hovers in `accent`. A control with a colour of its own (the star) hovers in a wash of
-  it: the colour at `tintOpacity`, which differs in the dark scheme.
+  it: the colour at `colorTintOpacity`, lighter in the dark scheme.
 - Things side by side have no gap between them: an `HStack(spacing: 0)` of buttons, rows with
   no spacing. The space is inside each control, so hover areas and hit areas touch.
 - Every button can carry an icon and has a `pending` state; while pending, the spinner stands

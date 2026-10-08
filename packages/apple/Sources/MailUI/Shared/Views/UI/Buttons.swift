@@ -257,7 +257,7 @@ struct PlainButton<Label: View>: View {
 
         private var fill: Color {
             guard let tint else { return Tokens.accentStronger.color }
-            return tint.opacity(Tokens.tintOpacity).color
+            return tint.opacity(Tokens.colorTintOpacity).color
         }
     }
 }

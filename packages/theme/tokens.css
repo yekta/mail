@@ -34,8 +34,8 @@
   --shadow: #000000;
   --shadow-opacity: 0.14;
   --shadow-stronger-opacity: 0.22;
-  --tint-opacity: 0.12;
-  --tint-stronger-opacity: 0.2;
+  --color-tint-opacity: 0.12;
+  --color-tint-stronger-opacity: 0.2;
   --account-1: #cd605a;
   --account-2: #c56c21;
   --account-3: #a48100;
@@ -79,8 +79,8 @@
     --shadow: #000000;
     --shadow-opacity: 0.4;
     --shadow-stronger-opacity: 0.6;
-    --tint-opacity: 0.2;
-    --tint-stronger-opacity: 0.3;
+    --color-tint-opacity: 0.08;
+    --color-tint-stronger-opacity: 0.14;
     --account-1: #f07f77;
     --account-2: #e78a45;
     --account-3: #c7a01e;

@@ -313,7 +313,7 @@ final class ThreadRowView: NSTableRowView {
         fill.setFill()
         column.fill()
         if isChecked {
-            Tokens.primary.opacity(Tokens.tintOpacity).platform.setFill()
+            Tokens.primary.opacity(Tokens.colorTintOpacity).platform.setFill()
             column.fill()
         }
         Tokens.border.platform.setFill()
@@ -359,7 +359,7 @@ final class ThreadRowView: NSTableRowView {
         Self.drawLine(text.line, x: x, width: max(trailing - x, 0), middle: middle)
         guard row.draftId == nil else { return }
         let starLit = hoveredHit == .star
-        if starLit { Self.drawHover(around: starRect, color: Tokens.star.opacity(Tokens.tintOpacity).platform) }
+        if starLit { Self.drawHover(around: starRect, color: Tokens.star.opacity(Tokens.colorTintOpacity).platform) }
         let starColor = row.starred || starLit ? Tokens.star.platform : Tokens.input.platform
         Self.drawSymbol(row.starred ? .starFilled : .star, in: starRect, color: starColor)
     }
