@@ -8,6 +8,9 @@ added to the component, not to the view.
 
 - Colours come from `Tokens` (generated from `packages/theme/tokens.json`). Never a hex value,
   never a system colour.
+- The page is `background`: the bars, the sidebar, the list. An open thread, a message being
+  written and a form's card are `card` on it. A hairline on the page is `border`; inside a
+  card it is `cardBorder`.
 - Text comes from the scale, `TextStyle`: `Text("…").textStyle(.caption)`. A view picks a
   style, never a size. A style carries its usual colour; `color:` overrides it.
 - Distances come from `Space`: `xs` 4, `s` 8, `m` 12, `l` 16, `xl` 20, `xxl` 28. Heights of
@@ -60,7 +63,7 @@ added to the component, not to the view.
 | `EmptyState` | An icon and a calm line for an empty list |
 | `Banner`, `ToastView` | A line across the window that stays, and the note at the bottom that goes |
 | `Avatar` | Initials in a circle of the address's colour |
-| `Rule`, `.rule(edge)` | A hairline |
+| `Rule`, `.rule(edge)` | A hairline, in `border` or in `cardBorder` |
 | `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page on the Mac |
 | `FlowLayout` | Wrapping layout for chips |
 

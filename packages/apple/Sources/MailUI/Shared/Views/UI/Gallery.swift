@@ -121,7 +121,6 @@ struct GalleryView: View {
                             selected: tab, title: \.name, count: \.count, pick: { tab = $0.id }
                         )
                         .padding(.horizontal, Space.l)
-                        .background(Tokens.card.color)
                         .rule(.bottom)
                     }
                     FormSection(title: "Notes") {

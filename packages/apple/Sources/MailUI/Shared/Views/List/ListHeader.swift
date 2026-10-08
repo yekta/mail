@@ -24,7 +24,7 @@ struct ListHeader: View {
                 }
             }
             .frame(height: 38 * Platform.scale)
-            .background(Tokens.card.color)
+            .background(Tokens.background.color)
             .rule(.bottom)
         }
     }

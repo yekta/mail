@@ -34,7 +34,7 @@ struct SidebarView: View {
             }
             footer
         }
-        .background(Tokens.card.color)
+        .background(Tokens.background.color)
     }
 
     private func row(_ mailbox: Mailbox, indent: CGFloat = 0) -> some View {

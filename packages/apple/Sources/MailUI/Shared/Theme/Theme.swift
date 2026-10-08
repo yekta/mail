@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// A number of `packages/theme/tokens.json`, light and dark.
-struct ThemeNumber {
+struct ThemeNumber: Equatable {
     let light: Double
     let dark: Double
 }
 
 /// A colour of `packages/theme/tokens.json`, light and dark.
-struct ThemeColor {
+struct ThemeColor: Equatable {
     let light: UInt32
     let dark: UInt32
     var alpha = ThemeNumber(light: 1, dark: 1)
