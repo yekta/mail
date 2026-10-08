@@ -945,6 +945,16 @@ public final class MailStore {
         }
     }
 
+    func setAccountColor(_ id: String, _ color: String) {
+        Task {
+            do {
+                _ = try await bridge.call("set_account_color", ["account": id, "color": color], as: Empty.self)
+            } catch {
+                show(error.localizedDescription)
+            }
+        }
+    }
+
     func signOut() {
         Task {
             _ = try? await bridge.call("sign_out", as: Empty.self)

@@ -57,6 +57,9 @@ enum Theme {
         Tokens.account6, Tokens.account7, Tokens.account8, Tokens.account9, Tokens.account10,
     ]
 
+    /// The names the core knows the colours by, `account-1` to `account-10`.
+    static let accountColorNames = accountColors.indices.map { "account-\($0 + 1)" }
+
     /// An account's colour by the token name the core gives it, `account-1` to `account-10`.
     static func accountColor(_ name: String) -> ThemeColor {
         guard let number = Int(name.dropFirst("account-".count)), (1...accountColors.count).contains(number) else {

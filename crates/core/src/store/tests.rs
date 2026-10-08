@@ -415,6 +415,24 @@ fn preferences_set_here_win_until_the_server_has_them() {
 }
 
 #[test]
+fn an_account_colour_chosen_here_wins_until_the_server_has_it() {
+    let mut store = store();
+    apply(&mut store, &[account()], &[message("m", "t", "Alice", 1_000)], 1);
+    let color = |store: &Store| store.accounts().unwrap()[0].color.clone();
+    let op = Op::SetAccountColor { account_id: "a".into(), color: "account-7".into() };
+    let touched = store.apply_local("colour", &op).unwrap();
+    assert!(touched.mailboxes);
+    assert_eq!(color(&store), "account-7");
+    assert_eq!(inbox(&store)[0].color, "account-7");
+
+    apply(&mut store, &[account()], &[], 2);
+    assert_eq!(color(&store), "account-7");
+    store.settle("colour", true).unwrap();
+    apply(&mut store, &[account()], &[], 3);
+    assert_eq!(color(&store), "account-1");
+}
+
+#[test]
 fn new_unread_inbox_mail_from_others_arrives_once() {
     let mut store = store();
     let mut read = message("m2", "t2", "Bob", 2_000);

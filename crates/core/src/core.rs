@@ -14,8 +14,8 @@ use chrono::Local;
 use mail_protocol::api::{DevLoginRequest, ExchangeRequest, JmapAccountRequest, LinkTicket, TokenResponse};
 use mail_protocol::wire::{ClientMessage, ServerMessage};
 use mail_protocol::{
-    Account, Address, Draft, DraftAttachment, Label, Message, MessageState, Op, PROTOCOL_VERSION, Preference,
-    SavedDraft, role,
+    ACCOUNT_COLORS, Account, Address, Draft, DraftAttachment, Label, Message, MessageState, Op, PROTOCOL_VERSION,
+    Preference, SavedDraft, role,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -412,6 +412,7 @@ impl Core {
             Command::RemoveAccount { account } => {
                 self.mutate(Op::RemoveAccount { account_id: account }).map(|op_id| json!({ "op_id": op_id }))
             }
+            Command::SetAccountColor { account, color } => self.set_account_color(account, color),
             Command::Mailboxes => self.mailboxes(),
             Command::Threads { mailbox, offset, limit, filter } => self.threads(&mailbox, offset, limit, filter),
             Command::Prefetch { threads } => self.prefetch(&threads),
@@ -1080,6 +1081,17 @@ impl Core {
         let action = self.actions;
         self.backlog.extend(ops.map(|op| Step::Mutate { action, op }));
         Ok(ActReply { message: Some("Archived.".into()), undo, url: None })
+    }
+
+    fn set_account_color(&mut self, account: String, color: String) -> Result<Value> {
+        if !ACCOUNT_COLORS.contains(&color.as_str()) {
+            bail!("That colour doesn't exist.");
+        }
+        if self.store.account_address(&account).is_none() {
+            bail!("That account is gone.");
+        }
+        self.mutate(Op::SetAccountColor { account_id: account, color })?;
+        Ok(json!({}))
     }
 
     fn create_label(&mut self, account: String, name: &str) -> Result<Value> {

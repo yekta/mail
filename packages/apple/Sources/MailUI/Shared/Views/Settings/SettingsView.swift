@@ -18,14 +18,18 @@ struct SettingsView: View {
                 }
                 SettingsSection(title: "Accounts") {
                     ForEach(store.accounts) { account in
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.accountColor(account.color).color).frame(width: 8, height: 8)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(account.address).font(.ui(14))
-                                Text(status(account)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 10) {
+                                Circle().fill(Theme.accountColor(account.color).color).frame(width: 8, height: 8)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(account.address).font(.ui(14))
+                                    Text(status(account)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                                }
+                                Spacer()
+                                ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
                             }
-                            Spacer()
-                            ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
+                            SwatchRow(selected: account.color) { store.setAccountColor(account.id, $0) }
+                                .padding(.leading, 10)
                         }
                     }
                     if adding {
