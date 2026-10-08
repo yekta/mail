@@ -125,33 +125,24 @@ struct MacRoot: View {
     private var page: some View {
         ZStack {
             Tokens.background.color
-            // The list stays under an open thread, so going back finds it where it was left.
-            Group {
-                if store.visibleRows.isEmpty, store.splits.isEmpty, store.filter == nil {
-                    EmptyList()
-                } else if store.visibleRows.isEmpty {
-                    VStack(spacing: 0) {
-                        ListHeader()
-                        EmptyList().frame(maxHeight: .infinity)
-                    }
-                    .frame(maxWidth: Theme.cardWidth)
-                    .padding(.top, Space.l)
-                    .padding(.horizontal, Space.xl + 4)
-                } else {
-                    // The list scrolls the whole page; only its header stays put above it.
-                    let header = ListHeader.shows(store)
-                    VStack(spacing: 0) {
-                        if header {
-                            ListHeader()
-                                .frame(maxWidth: Theme.cardWidth)
-                                .padding(.top, Space.l)
-                                .padding(.horizontal, Space.xl + 4)
-                        }
-                        ThreadListMac(
-                            store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
-                            topInset: header ? 0 : Space.l, shown: store.conversation == nil
-                        )
-                    }
+            // The list stays under an open thread, so going back finds it where it was left. It
+            // stays through a change of mailbox too, with the empty state over it when there is
+            // nothing to show, so the table isn't made anew and the page never goes blank between.
+            let header = ListHeader.shows(store)
+            VStack(spacing: 0) {
+                // The list scrolls the whole page; only its header stays put above it.
+                if header {
+                    ListHeader()
+                        .frame(maxWidth: Theme.cardWidth)
+                        .padding(.top, Space.l)
+                        .padding(.horizontal, Space.xl + 4)
+                }
+                ThreadListMac(
+                    store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
+                    topInset: header ? 0 : Space.l, shown: store.conversation == nil, ready: store.listReady
+                )
+                .overlay {
+                    if store.listEmpty { EmptyList() }
                 }
             }
             .opacity(store.conversation == nil ? 1 : 0)

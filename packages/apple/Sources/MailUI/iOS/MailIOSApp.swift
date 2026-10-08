@@ -107,15 +107,16 @@ struct MailboxScreen: View {
                 .rule(.bottom)
             }
             ListHeader()
-            if store.visibleRows.isEmpty {
-                EmptyList().background(Tokens.background.color)
-            } else {
-                ThreadListIOS(store: store, rows: store.visibleRows, editing: editing, checked: store.selection) { thread in
-                    let draft = store.row(thread)?.draftId != nil
-                    store.open(thread)
-                    if !draft { path.append(.thread(thread)) }
-                }
-                .ignoresSafeArea(edges: .bottom)
+            // The table stays through a change of mailbox, with the empty state over it when there
+            // is nothing to show, so it isn't made anew and the page never goes blank between.
+            ThreadListIOS(store: store, rows: store.visibleRows, editing: editing, checked: store.selection, ready: store.listReady) { thread in
+                let draft = store.row(thread)?.draftId != nil
+                store.open(thread)
+                if !draft { path.append(.thread(thread)) }
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .overlay {
+                if store.listEmpty { EmptyList().background(Tokens.background.color) }
             }
         }
         .navigationTitle(editing ? "\(store.selection.count) Selected" : store.mailboxName)
