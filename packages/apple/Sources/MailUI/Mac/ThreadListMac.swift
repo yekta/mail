@@ -62,7 +62,7 @@ struct ThreadListMac: NSViewRepresentable {
         scroll.scrollerInsets = NSEdgeInsets(top: -topInset, left: 0, bottom: -Self.bottomInset, right: 0)
     }
 
-    private static let bottomInset: CGFloat = 16
+    private static let bottomInset = Space.l
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
