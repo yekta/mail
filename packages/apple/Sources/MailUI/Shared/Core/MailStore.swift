@@ -692,7 +692,7 @@ public final class MailStore {
     func openDraft(_ id: String) {
         Task {
             do {
-                let opened = try await bridge.call("open_draft", ["id": id], as: DraftReply.self)
+                let opened = try await bridge.call("open_draft", ["draft_id": id], as: DraftReply.self)
                 let thread = conversation?.draftId == id ? conversation?.id : nil
                 compose = Compose(
                     draft: opened.draft, from: opened.from, showCc: !opened.draft.cc.isEmpty || !opened.draft.bcc.isEmpty,
@@ -712,7 +712,7 @@ public final class MailStore {
         let save = Task { () -> String? in
             let id = await previous?.value ?? compose.draftId
             var fields: [String: Any] = ["draft": CoreBridge.object(compose.draft)]
-            if let id { fields["id"] = id }
+            if let id { fields["draft_id"] = id }
             return (try? await bridge.call("save_draft", fields, as: IDReply.self).id) ?? id
         }
         draftSaves[compose.id] = save
@@ -736,7 +736,7 @@ public final class MailStore {
         Task {
             let id = await draftSaves[compose.id]?.value ?? compose.draftId
             draftSaves[compose.id] = nil
-            if let id { _ = try? await bridge.call("delete_draft", ["id": id], as: Empty.self) }
+            if let id { _ = try? await bridge.call("delete_draft", ["draft_id": id], as: Empty.self) }
             show("Draft discarded.")
         }
     }

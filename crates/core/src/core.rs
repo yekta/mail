@@ -431,9 +431,9 @@ impl Core {
             Command::SetPreference { key, value } => self.set_preference(key, value),
             Command::NewDraft { account } => self.new_draft(account),
             Command::ReplyDraft { thread, kind } => self.reply_draft(&thread, kind),
-            Command::SaveDraft { id, draft } => self.save_draft(id, draft),
-            Command::OpenDraft { id } => self.open_draft(&id),
-            Command::DeleteDraft { id } => self.mutate(Op::DeleteDraft { draft_id: id }).map(|_| json!({})),
+            Command::SaveDraft { draft_id, draft } => self.save_draft(draft_id, draft),
+            Command::OpenDraft { draft_id } => self.open_draft(&draft_id),
+            Command::DeleteDraft { draft_id } => self.mutate(Op::DeleteDraft { draft_id }).map(|_| json!({})),
             Command::Send { draft, delay, send_at, remind_at, draft_id } => {
                 self.queue_send(draft, delay, send_at, remind_at, draft_id)
             }
@@ -1801,5 +1801,21 @@ mod tests {
         assert!(demo.call(json!({ "type": "open_attachment", "message": message, "index": 3 })).await.is_err());
         let printed = demo.call(json!({ "type": "print_thread", "thread": thread })).await.unwrap();
         assert!(printed["html"].as_str().unwrap().contains("Coach C, seats 41 and 42"));
+    }
+
+    #[tokio::test]
+    async fn a_drafts_own_id_survives_the_apps_envelope() {
+        let mut demo = Demo::start();
+        let page = demo.call(json!({ "type": "threads", "mailbox": "drafts" })).await.unwrap();
+        let id = page["rows"][0]["draft_id"].as_str().unwrap().to_string();
+        let json = json!({ "id": 7, "type": "open_draft", "draft_id": id }).to_string();
+        let envelope: crate::api::Envelope = serde_json::from_str(&json).unwrap();
+        assert_eq!(envelope.id, 7);
+        let opened = demo.call(json!({ "type": "open_draft", "draft_id": id })).await.unwrap();
+        assert_eq!(opened["id"], id.as_str());
+        assert_eq!(opened["draft"]["subject"], "Release notes for 4.2");
+        demo.call(json!({ "type": "delete_draft", "draft_id": id })).await.unwrap();
+        let page = demo.call(json!({ "type": "threads", "mailbox": "drafts" })).await.unwrap();
+        assert!(page["rows"].as_array().unwrap().is_empty());
     }
 }

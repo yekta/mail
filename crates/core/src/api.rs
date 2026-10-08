@@ -268,19 +268,19 @@ pub enum Command {
         kind: ReplyKind,
     },
     /// Keeps a draft, on this device at once and on the user's other devices through the server.
-    /// `{id}`; a new one is made when `id` is none.
+    /// `{id}`; a new one is made when `draft_id` is none.
     SaveDraft {
         #[serde(default)]
-        id: Option<String>,
+        draft_id: Option<String>,
         draft: Draft,
     },
     /// `{id, draft, from}`.
     OpenDraft {
-        id: String,
+        draft_id: String,
     },
     /// `{}`.
     DeleteDraft {
-        id: String,
+        draft_id: String,
     },
     /// Sends after `delay` seconds (the undo window), or at `send_at` (Unix milliseconds). Adds
     /// the signature, folds the quote in and makes the HTML. Uploads the attachments that have a

@@ -118,7 +118,7 @@ extension MailStore {
         Task {
             do {
                 for id in ids {
-                    _ = try await bridge.call("delete_draft", ["id": id], as: Empty.self)
+                    _ = try await bridge.call("delete_draft", ["draft_id": id], as: Empty.self)
                 }
                 show(ids.count == 1 ? "Draft deleted." : "\(ids.count) drafts deleted.")
             } catch {
