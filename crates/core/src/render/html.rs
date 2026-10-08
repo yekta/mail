@@ -17,7 +17,7 @@ const TOKENS: &str = include_str!("../../../../packages/theme/tokens.css");
 const STYLE: &str = r#"
 html, body { margin: 0; padding: 0; background: transparent; }
 body { font: 15px/1.55 "Avenir", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: var(--card-foreground);
-  -webkit-text-size-adjust: 100%; overflow-wrap: anywhere; }
+  -webkit-text-size-adjust: 100%; overflow-wrap: break-word; }
 a { color: var(--primary); }
 img { max-width: 100%; height: auto; }
 .plain { white-space: pre-wrap; }
@@ -149,7 +149,7 @@ pub fn sanitize(html: &str, show_images: bool, blocked: Arc<AtomicBool>, palette
 
 const PRINT_STYLE: &str = r#"
 body { font: 13px/1.5 "Avenir", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: #111; background: #fff;
-  margin: 24px; overflow-wrap: anywhere; }
+  margin: 24px; overflow-wrap: break-word; }
 h1 { font-size: 18px; margin: 0 0 16px; }
 .message { border-top: 1px solid #ccc; padding: 12px 0; }
 .headers { color: #555; margin-bottom: 12px; }
