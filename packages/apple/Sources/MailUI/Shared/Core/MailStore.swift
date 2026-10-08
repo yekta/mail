@@ -70,6 +70,9 @@ public final class MailStore {
     var accounts: [AccountView] = []
     var mailbox = "inbox"
     var rows: [ThreadRow] = []
+    /// False while the rows are still another mailbox's or filter's, until its page is read.
+    /// The old rows stay on screen rather than a blank page.
+    var listReady = true
     var total = 0
     /// The thread on screen, when one is open.
     var conversation: Conversation?
@@ -147,6 +150,9 @@ public final class MailStore {
 
     /// The rows the list shows: the search's while searching.
     var visibleRows: [ThreadRow] { searchRows ?? rows }
+
+    /// Nothing to list, and no page on its way that could fill it.
+    var listEmpty: Bool { searchRows?.isEmpty ?? (rows.isEmpty && listReady) }
 
     /// The mailbox without its split: `inbox` for `inbox:other`.
     var baseMailbox: String {
@@ -425,6 +431,7 @@ public final class MailStore {
             if page.rows != rows { rows = page.rows }
             if page.total != total { total = page.total }
             if page.splits != splits { splits = page.splits }
+            if !listReady { listReady = true }
             guard searchRows == nil else { continue }
             if !selection.isEmpty {
                 let kept = selection.intersection(rows.lazy.map(\.id))
@@ -458,7 +465,7 @@ public final class MailStore {
         conversation = nil
         searchRows = nil
         searchQuery = ""
-        rows = []
+        listReady = false
         selection = []
         selectionAnchor = nil
         selected = nil
@@ -482,7 +489,7 @@ public final class MailStore {
         guard filter != self.filter else { return }
         self.filter = filter
         selection = []
-        rows = []
+        listReady = false
         listOffset = 0
         Task { await reloadThreads() }
     }

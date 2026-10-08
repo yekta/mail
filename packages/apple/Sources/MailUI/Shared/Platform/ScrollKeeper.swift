@@ -52,6 +52,13 @@ final class ScrollKeeper: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
 
+    /// Goes to the top, for a list that now shows another mailbox.
+    func top() {
+        pending = nil
+        guard let scroll else { return }
+        Self.scroll(scroll, to: Self.range(of: scroll).0)
+    }
+
     @objc private func moved() {
         guard !restoring else { return }
         guard pending == nil else {

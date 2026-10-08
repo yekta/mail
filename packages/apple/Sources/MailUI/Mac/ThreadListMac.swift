@@ -14,6 +14,8 @@ struct ThreadListMac: NSViewRepresentable {
     let topInset: CGFloat
     /// False under an open thread: the list keeps its place, and gives up the keyboard.
     let shown: Bool
+    /// False while the rows are the mailbox before; when they are the new one's, the list goes to the top.
+    let ready: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store) }
 
@@ -52,7 +54,7 @@ struct ThreadListMac: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         if scroll.contentInsets.top != topInset { pad(scroll) }
         if scroll.isHidden == shown { scroll.isHidden = !shown }
-        context.coordinator.update(rows: rows, selected: selected, checked: checked)
+        context.coordinator.update(rows: rows, selected: selected, checked: checked, ready: ready)
     }
 
     /// Pads the rows, not the scroll view, so the padding scrolls with them and the scroller
@@ -76,6 +78,7 @@ struct ThreadListMac: NSViewRepresentable {
         private var texts: [String: (ThreadRow, RowText)] = [:]
         private var selected: String?
         private var checked: Set<String> = []
+        private var ready = true
         private var prefetch: DispatchWorkItem?
         /// The row last clicked: it is where the pointer is, so the list doesn't move to show it.
         private var clickedRow: String?
@@ -86,14 +89,16 @@ struct ThreadListMac: NSViewRepresentable {
             self.store = store
         }
 
-        func update(rows: [ThreadRow], selected: String?, checked: Set<String>) {
+        func update(rows: [ThreadRow], selected: String?, checked: Set<String>, ready: Bool) {
             guard let table else { return }
             let moved = selected != self.selected
             let picked = checked != self.checked
+            let switched = ready && !self.ready
             let changed = Self.changes(from: self.rows, to: rows)
             self.rows = rows
             self.selected = selected
             self.checked = checked
+            self.ready = ready
             if let changed {
                 for index in changed {
                     guard let view = table.rowView(atRow: index, makeIfNecessary: false) as? ThreadRowView else { continue }
@@ -102,6 +107,7 @@ struct ThreadListMac: NSViewRepresentable {
             } else {
                 table.reloadData()
             }
+            if switched { keeper?.top() }
             if changed != nil, moved || picked {
                 table.enumerateAvailableRowViews { view, _ in
                     guard let view = view as? ThreadRowView, let id = view.row?.id else { return }

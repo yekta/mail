@@ -9,6 +9,8 @@ struct ThreadListIOS: UIViewRepresentable {
     let rows: [ThreadRow]
     let editing: Bool
     let checked: Set<String>
+    /// False while the rows are the mailbox before; when they are the new one's, the list goes to the top.
+    let ready: Bool
     let open: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store, open: open) }
@@ -33,7 +35,7 @@ struct ThreadListIOS: UIViewRepresentable {
 
     func updateUIView(_ table: UITableView, context: Context) {
         context.coordinator.open = open
-        context.coordinator.update(rows: rows, editing: editing, checked: checked)
+        context.coordinator.update(rows: rows, editing: editing, checked: checked, ready: ready)
     }
 
     @MainActor
@@ -43,6 +45,7 @@ struct ThreadListIOS: UIViewRepresentable {
         weak var table: UITableView?
         private var rows: [ThreadRow] = []
         private var texts: [String: (ThreadRow, RowText)] = [:]
+        private var ready = true
         private var prefetch: DispatchWorkItem?
         /// Keeps the list where it was left, across the app being made anew.
         var keeper: ScrollKeeper?
@@ -52,10 +55,12 @@ struct ThreadListIOS: UIViewRepresentable {
             self.open = open
         }
 
-        func update(rows: [ThreadRow], editing: Bool, checked: Set<String>) {
+        func update(rows: [ThreadRow], editing: Bool, checked: Set<String>, ready: Bool) {
             guard let table else { return }
+            let switched = ready && !self.ready
             let changed = Self.changes(from: self.rows, to: rows)
             self.rows = rows
+            self.ready = ready
             if let changed {
                 let visible = Set(table.indexPathsForVisibleRows ?? [])
                 let paths = changed.map { IndexPath(row: $0, section: 0) }.filter(visible.contains)
@@ -63,6 +68,7 @@ struct ThreadListIOS: UIViewRepresentable {
             } else {
                 table.reloadData()
             }
+            if switched { keeper?.top() }
             if table.isEditing != editing { table.setEditing(editing, animated: true) }
             if editing { pick(checked) }
             if changed != [] { schedulePrefetch() }
