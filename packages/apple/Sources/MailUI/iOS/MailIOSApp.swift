@@ -122,6 +122,8 @@ struct MailboxScreen: View {
         }
         .navigationTitle(editing ? "\(store.selection.count) Selected" : store.mailboxName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Tokens.background.color, for: .navigationBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .navigationBarBackButtonHidden(editing)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic))
         .onAppear { query = store.searchQuery }
@@ -257,6 +259,8 @@ struct ThreadScreenIOS: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Tokens.background.color, for: .navigationBar, .bottomBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar, .bottomBar)
         .toolbar {
             ToolbarItemGroup(placement: .bottomBar) {
                 CommandBar(threads: [thread], reply: true)
