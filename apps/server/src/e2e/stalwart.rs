@@ -60,31 +60,43 @@ async fn eventually<T>(what: &str, mut check: impl AsyncFnMut() -> Option<T>) ->
     panic!("timed out waiting for {what}");
 }
 
-#[sqlx::test]
-async fn seeded_mail_reaches_the_core_and_archiving_reaches_stalwart(db: PgPool) {
+const PASSWORD: &str = "quiet-harbor-lantern-42";
+
+/// A new Stalwart user with `count` seeded messages: the server's address, the user's and a
+/// connection. None when STALWART_URL is not set.
+async fn stalwart_user(count: usize) -> Option<(String, String, Jmap)> {
     let Ok(stalwart) = std::env::var("STALWART_URL") else {
         eprintln!("skipped: STALWART_URL is not set");
-        return;
+        return None;
     };
     let admin = std::env::var("STALWART_ADMIN").unwrap_or_else(|_| "admin:adminpass".into());
     let (name, secret) = admin.split_once(':').unwrap();
     let admin = (name.to_string(), secret.to_string());
     let email = format!("e2e-{}@example.com", &crate::random_token()[..10]);
-    let password = "quiet-harbor-lantern-42";
 
     mail_protocol::tls::install();
     let http = reqwest::Client::new();
-    seed::create_user(&http, &stalwart, &admin, &email, password).await.unwrap();
-    let jmap = Jmap::open(&http, &stalwart, &email, password).await.unwrap();
-    seed::fill(&jmap, &email, 40, chrono::Utc::now().timestamp()).await.unwrap();
+    seed::create_user(&http, &stalwart, &admin, &email, PASSWORD).await.unwrap();
+    let jmap = Jmap::open(&http, &stalwart, &email, PASSWORD).await.unwrap();
+    seed::fill(&jmap, &email, count, chrono::Utc::now().timestamp()).await.unwrap();
+    Some((stalwart, email, jmap))
+}
+
+async fn inbox_rows(core: &mut Driver) -> Vec<Value> {
+    let page = core.call(json!({ "type": "threads", "mailbox": "inbox" })).await;
+    page["rows"].as_array().cloned().unwrap_or_default()
+}
+
+#[sqlx::test]
+async fn seeded_mail_reaches_the_core_and_archiving_reaches_stalwart(db: PgPool) {
+    let Some((stalwart, email, jmap)) = stalwart_user(40).await else { return };
 
     let server = Server::start_with(db, |config| config.workers = true).await;
     let mut core = Driver::start(&server.base);
-    core.call(json!({ "type": "add_jmap_account", "url": stalwart, "username": email, "password": password })).await;
+    core.call(json!({ "type": "add_jmap_account", "url": stalwart, "username": email, "password": PASSWORD })).await;
 
     let rows = eventually("the inbox in the core", async || {
-        let page = core.call(json!({ "type": "threads", "mailbox": "inbox" })).await;
-        let rows = page["rows"].as_array().cloned().unwrap_or_default();
+        let rows = inbox_rows(&mut core).await;
         (!rows.is_empty()).then_some(rows)
     })
     .await;
@@ -121,6 +133,44 @@ async fn seeded_mail_reaches_the_core_and_archiving_reaches_stalwart(db: PgPool)
         let inbox = inbox.as_str().unwrap();
         let emails = answers[1]["list"].as_array().unwrap();
         emails.iter().all(|email| email["mailboxIds"][inbox].is_null()).then_some(())
+    })
+    .await;
+}
+
+#[sqlx::test]
+async fn new_mail_at_stalwart_is_pushed_without_waiting_for_a_poll(db: PgPool) {
+    let Some((stalwart, email, jmap)) = stalwart_user(5).await else { return };
+    let server = Server::start_with(db, |config| {
+        config.workers = true;
+        config.poll_interval = Duration::from_secs(3600);
+    })
+    .await;
+    let mut core = Driver::start(&server.base);
+    core.call(json!({ "type": "add_jmap_account", "url": stalwart, "username": email, "password": PASSWORD })).await;
+    eventually("the inbox in the core", async || (!inbox_rows(&mut core).await.is_empty()).then_some(())).await;
+
+    let mailboxes = jmap
+        .call(
+            &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+            vec![("Mailbox/get", json!({ "ids": null, "properties": ["id", "role"] }))],
+        )
+        .await
+        .unwrap();
+    let inbox =
+        mailboxes[0]["list"].as_array().unwrap().iter().find(|mailbox| mailbox["role"] == "inbox").unwrap()["id"]
+            .clone();
+    let raw = mail_builder::MessageBuilder::new()
+        .from(("Ada Lovelace", "ada@example.com"))
+        .to(email.as_str())
+        .subject("Pushed, not polled")
+        .text_body("Hello.")
+        .write_to_vec()
+        .unwrap();
+    let blob = jmap.upload(raw).await.unwrap();
+    jmap.import(vec![json!({ "blobId": blob, "mailboxIds": { inbox.as_str().unwrap(): true } })]).await.unwrap();
+
+    eventually("the new mail in the core", async || {
+        inbox_rows(&mut core).await.iter().any(|row| row["subject"] == "Pushed, not polled").then_some(())
     })
     .await;
 }

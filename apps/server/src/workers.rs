@@ -107,7 +107,11 @@ async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mut
         match Connection::open(&state, &account).await {
             Ok(connection) => {
                 *slot.lock().unwrap() = Some(connection.clone());
-                if let Err(error) = work(&state, account_id, &connection, &wake, &mut backoff).await
+                let worked = tokio::select! {
+                    worked = work(&state, account_id, &connection, &wake, &mut backoff) => worked,
+                    never = connection.push(&wake) => match never {},
+                };
+                if let Err(error) = worked
                     && handle(&state, &account, &error).await
                 {
                     return;

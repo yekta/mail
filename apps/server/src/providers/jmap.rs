@@ -3,12 +3,14 @@
 //! with the archive role, which is made when there is none.
 
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::sync::Arc;
+use std::time::Duration;
 
 use mail_protocol::{Address, Attachment, Draft, Identity, Op, Recipients, role};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 use uuid::Uuid;
 
 use super::{Batch, Reauth, Refused, Synced, html_text, one_line};
@@ -20,6 +22,10 @@ const CORE: &str = "urn:ietf:params:jmap:core";
 const MAIL: &str = "urn:ietf:params:jmap:mail";
 const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
 const PAGE: usize = 250;
+/// How often the event source is asked to ping; a stream silent for three is dead.
+const PING: Duration = Duration::from_secs(30);
+/// An event source is opened again after this long, as the client's timeout would end it.
+const STREAM_LIFETIME: Duration = Duration::from_secs(30 * 60);
 const EMAIL_PROPERTIES: [&str; 22] = [
     "id",
     "threadId",
@@ -65,6 +71,7 @@ struct Session {
     api_url: String,
     upload_url: String,
     download_url: String,
+    event_source_url: String,
     account_id: String,
     username: String,
 }
@@ -137,10 +144,60 @@ impl Jmap {
                 api_url: resolve(text("apiUrl")),
                 upload_url: resolve(text("uploadUrl")),
                 download_url: resolve(text("downloadUrl")),
+                event_source_url: resolve(text("eventSourceUrl")),
                 account_id,
                 username: text("username"),
             }),
         })
+    }
+
+    /// Wakes the worker whenever the server says mail or mailboxes changed (RFC 8620 §7.3).
+    /// Never returns: a closed stream is opened again, and a server without one is waited on.
+    pub async fn push(&self, wake: &Notify) -> Infallible {
+        if self.session.event_source_url.is_empty() {
+            return std::future::pending().await;
+        }
+        let mut backoff = Duration::from_secs(2);
+        loop {
+            if let Err(error) = self.listen(wake, &mut backoff).await {
+                tracing::debug!("the JMAP event source closed: {error:#}");
+            }
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(Duration::from_secs(300));
+        }
+    }
+
+    async fn listen(&self, wake: &Notify, backoff: &mut Duration) -> anyhow::Result<()> {
+        let url = self
+            .session
+            .event_source_url
+            .replace("{types}", "Email,Mailbox")
+            .replace("{closeafter}", "no")
+            .replace("{ping}", &PING.as_secs().to_string());
+        let mut response = self
+            .http
+            .get(url)
+            .header("Authorization", &self.session.authorization)
+            .header("Accept", "text/event-stream")
+            .timeout(STREAM_LIFETIME)
+            .send()
+            .await?
+            .error_for_status()?;
+        *backoff = Duration::from_secs(2);
+        // What changed while it wasn't listening.
+        wake.notify_one();
+        let mut pending = Vec::new();
+        while let Some(chunk) = tokio::time::timeout(PING * 3, response.chunk()).await?? {
+            pending.extend_from_slice(&chunk);
+            while let Some(end) = pending.iter().position(|byte| *byte == b'\n') {
+                let line: Vec<u8> = pending.drain(..=end).collect();
+                let line = String::from_utf8_lossy(&line);
+                if line.starts_with("data:") && line.contains("StateChange") {
+                    wake.notify_one();
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The address mail is sent from: the first identity, else the login.

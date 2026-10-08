@@ -6,9 +6,11 @@ pub mod gmail;
 pub mod jmap;
 
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt;
 
 use mail_protocol::{Address, Draft, Identity, Op, Provider};
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -122,6 +124,15 @@ impl Connection {
         match self {
             Connection::Gmail(gmail) => gmail.create_label(name).await,
             Connection::Jmap(jmap) => jmap.create_label(name).await,
+        }
+    }
+
+    /// Wakes the worker when the provider says something changed, over a stream of its own.
+    /// Gmail pushes to the hook instead.
+    pub async fn push(&self, wake: &Notify) -> Infallible {
+        match self {
+            Connection::Gmail(_) => std::future::pending().await,
+            Connection::Jmap(jmap) => jmap.push(wake).await,
         }
     }
 
