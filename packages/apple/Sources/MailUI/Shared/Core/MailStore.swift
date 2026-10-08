@@ -155,11 +155,39 @@ public final class MailStore {
         return (parts.dropLast() + ["inbox"]).joined(separator: "/")
     }
 
+    /// Every mailbox there is, unified first.
+    var allMailboxes: [Mailbox] { unified + accounts.flatMap(\.mailboxes) }
+
+    /// The mailboxes shown as tabs over the list, in the user's order; one that is gone is skipped.
+    var tabs: [Mailbox] {
+        let all = allMailboxes
+        return TabPreference.ids(in: preferences).compactMap { id in all.first(where: { $0.id == id }) }
+    }
+
+    func setTabs(_ ids: [String]) {
+        setPreference(TabPreference.key, TabPreference.value(ids))
+    }
+
+    func isTab(_ id: String) -> Bool { TabPreference.ids(in: preferences).contains(id) }
+
+    /// Puts a mailbox among the tabs, or takes it off.
+    func toggleTab(_ id: String) {
+        var ids = TabPreference.ids(in: preferences)
+        if let index = ids.firstIndex(of: id) { ids.remove(at: index) } else { ids.append(id) }
+        setTabs(ids)
+    }
+
+    /// A mailbox's name, with its account's address after it when it is one account's.
+    func tabName(_ mailbox: Mailbox) -> String {
+        let parts = mailbox.id.split(separator: "/").map(String.init)
+        guard parts.count > 1, accounts.count > 1, let account = accounts.first(where: { $0.id == parts[0] }) else { return mailbox.name }
+        return "\(mailbox.name) · \(account.address)"
+    }
+
     var mailboxName: String {
         if searchRows != nil { return "Search" }
         let parts = baseMailbox.split(separator: "/").map(String.init)
-        let all = unified + accounts.flatMap(\.mailboxes)
-        let name = all.first(where: { $0.id == baseMailbox })?.name ?? "Inbox"
+        let name = allMailboxes.first(where: { $0.id == baseMailbox })?.name ?? "Inbox"
         guard parts.count > 1, let account = accounts.first(where: { $0.id == parts[0] }) else {
             return name == "Inbox" && accounts.count > 1 ? "All Inboxes" : name
         }

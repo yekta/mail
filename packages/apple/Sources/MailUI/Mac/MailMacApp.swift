@@ -185,7 +185,9 @@ struct MacTopBar: View {
                     placeholder: "Search", text: $query, style: .bar, autofocus: false, focusTrigger: focusSearch,
                     submit: { store.search(query) }, escape: store.endSearch, clear: store.endSearch
                 )
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 240)
+                Spacer()
+                MailboxTabs()
                 Spacer()
             }
         } trailing: {

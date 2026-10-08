@@ -45,6 +45,9 @@ struct SidebarView: View {
             store.select(mailbox: mailbox.id)
             picked(mailbox.id)
         }
+        .contextMenu {
+            Button(store.isTab(mailbox.id) ? "Remove from Tabs" : "Add to Tabs") { store.toggleTab(mailbox.id) }
+        }
     }
 
     private func accountRow(_ account: AccountView) -> some View {

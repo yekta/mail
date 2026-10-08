@@ -99,6 +99,13 @@ struct MailboxScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if !store.tabs.isEmpty, store.searchRows == nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    MailboxTabs().padding(.horizontal, Space.m).padding(.vertical, Space.xs)
+                }
+                .background(Tokens.background.color)
+                .rule(.bottom)
+            }
             ListHeader()
             if store.visibleRows.isEmpty {
                 EmptyList().background(Tokens.background.color)
