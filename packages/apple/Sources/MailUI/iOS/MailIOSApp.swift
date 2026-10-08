@@ -37,7 +37,7 @@ struct IOSRoot: View {
         Group {
             if !store.booted {
                 // The page's colour alone, until the core says where the app was left.
-                Tokens.card.color.ignoresSafeArea()
+                Tokens.background.color.ignoresSafeArea()
             } else if !store.signedIn {
                 OnboardingView()
             } else {
@@ -70,7 +70,7 @@ struct IOSStack: View {
             SidebarView(showSettings: { store.settingsOpen = true }, picked: { path.append(.mailbox($0)) })
                 .navigationTitle("Mailboxes")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(Tokens.card.color, for: .navigationBar)
+                .toolbarBackground(Tokens.background.color, for: .navigationBar)
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .mailbox: MailboxScreen(path: $path)
@@ -101,7 +101,7 @@ struct MailboxScreen: View {
         VStack(spacing: 0) {
             ListHeader()
             if store.visibleRows.isEmpty {
-                EmptyList().background(Tokens.card.color)
+                EmptyList().background(Tokens.background.color)
             } else {
                 ThreadListIOS(store: store, rows: store.visibleRows, editing: editing, checked: store.selection) { thread in
                     let draft = store.row(thread)?.draftId != nil

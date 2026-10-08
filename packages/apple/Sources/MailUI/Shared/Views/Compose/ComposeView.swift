@@ -70,7 +70,7 @@ struct ComposeView: View {
             } trailing: {
                 actions
             }
-            Rule()
+            Rule(color: Tokens.cardBorder)
             page
         }
         .modifier(behaviour)
@@ -107,7 +107,7 @@ struct ComposeView: View {
             #if os(macOS)
             .background(Tokens.background.color)
             #endif
-            Rule()
+            Rule(color: Tokens.cardBorder)
             toolbar
         }
         .background(Tokens.card.color)
@@ -247,7 +247,7 @@ struct ComposeView: View {
                         .textStyle(.label, color: Tokens.mutedMoreForeground.color)
                         .textSelection(.enabled)
                         .padding(.leading, Space.m)
-                        .overlay(alignment: .leading) { Rectangle().fill(Tokens.border.color).frame(width: 2) }
+                        .overlay(alignment: .leading) { Rectangle().fill(Tokens.cardBorder.color).frame(width: 2) }
                 }
             }
             if !compose.draft.attachments.isEmpty || compose.remindAt != nil {
@@ -326,7 +326,7 @@ struct ComposeView: View {
             .foregroundStyle(Tokens.foreground.color)
             .padding(.horizontal, Space.l)
             .frame(height: Theme.searchHeight * Platform.scale)
-            Rule().padding(.leading, Space.l)
+            Rule(color: Tokens.cardBorder).padding(.leading, Space.l)
         }
     }
 

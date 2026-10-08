@@ -56,7 +56,7 @@ struct MacRoot: View {
         Group {
             if !store.booted {
                 // The page's colour alone, until the core says where the app was left.
-                Tokens.card.color
+                Tokens.background.color
             } else if !store.signedIn {
                 OnboardingView().overlay(alignment: .bottom) { ToastView() }
             } else {
@@ -90,7 +90,7 @@ struct MacRoot: View {
             )
         }
         .frame(width: Theme.sidebarWidth)
-        .background(Tokens.card.color)
+        .background(Tokens.background.color)
         .rule(.trailing)
         .transition(.move(edge: .leading))
     }
@@ -118,7 +118,7 @@ struct MacRoot: View {
                 page
             }
         }
-        .background(Tokens.card.color)
+        .background(Tokens.background.color)
     }
 
     /// The list, and the thread open over it.
@@ -135,7 +135,6 @@ struct MacRoot: View {
                         EmptyList().frame(maxHeight: .infinity)
                     }
                     .frame(maxWidth: Theme.cardWidth)
-                    .background(Tokens.card.color)
                     .padding(.top, Space.l)
                     .padding(.horizontal, Space.xl + 4)
                 } else {

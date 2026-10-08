@@ -44,7 +44,7 @@ struct SearchField: View {
         .padding(.horizontal, Space.m)
         .frame(height: style == .sheet ? Theme.searchHeight * Platform.scale : ControlSize.regular.height)
         .background { if style == .bar { Capsule().strokeBorder(Tokens.input.color, lineWidth: Theme.hairline) } }
-        .overlay(alignment: .bottom) { if style == .sheet { Rule() } }
+        .overlay(alignment: .bottom) { if style == .sheet { Rule(color: Tokens.cardBorder) } }
         .onAppear { if autofocus { focused = true } }
         .onChange(of: focusTrigger) { focused = true }
     }

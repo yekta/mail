@@ -91,6 +91,6 @@ struct PopupCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: Theme.cardRadius).fill(Tokens.popover.color)
                     .shadow(color: Tokens.shadow.opacity(Tokens.shadowStrongerOpacity).color, radius: 12, y: 4)
             )
-            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Tokens.border.color, lineWidth: Theme.hairline))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Tokens.cardBorder.color, lineWidth: Theme.hairline))
     }
 }

@@ -59,7 +59,7 @@ struct AddressField<Accessory: View>: View {
             .padding(.horizontal, Space.l)
             .padding(.vertical, Space.s)
             .frame(minHeight: Theme.searchHeight * Platform.scale)
-            Rule().padding(.leading, Space.l)
+            Rule(color: Tokens.cardBorder).padding(.leading, Space.l)
         }
         // Hangs below the field, over what follows it.
         .overlay(alignment: .bottomLeading) {

@@ -17,9 +17,11 @@ struct ThreadListIOS: UIViewRepresentable {
         let table = UITableView(frame: .zero, style: .plain)
         table.register(ThreadCell.self, forCellReuseIdentifier: ThreadCell.identifier)
         table.rowHeight = Theme.iosRowHeight
-        table.separatorInset = .zero
-        table.separatorColor = Tokens.border.platform
-        table.backgroundColor = Tokens.card.platform
+        table.separatorStyle = .none
+        table.backgroundColor = Tokens.background.platform
+        let bottom = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: Theme.hairline))
+        bottom.backgroundColor = Tokens.border.platform
+        table.tableFooterView = bottom
         table.allowsMultipleSelectionDuringEditing = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
@@ -106,7 +108,7 @@ struct ThreadListIOS: UIViewRepresentable {
         func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
             let cell = tableView.dequeueReusableCell(withIdentifier: ThreadCell.identifier, for: indexPath)
             let row = rows[indexPath.row]
-            (cell as? ThreadCell)?.configure(row: row, text: text(for: row))
+            (cell as? ThreadCell)?.configure(row: row, text: text(for: row), first: indexPath.row == 0)
             return cell
         }
 
@@ -181,7 +183,6 @@ struct ThreadListIOS: UIViewRepresentable {
 }
 
 /// One thread on three lines: who wrote and the star, the subject, the snippet and the date.
-/// Read threads sit on grey, as Newton showed them.
 final class ThreadCell: UITableViewCell {
     static let identifier = "thread"
     private let canvas = RowCanvas()
@@ -189,6 +190,7 @@ final class ThreadCell: UITableViewCell {
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         canvas.isOpaque = false
+        backgroundColor = .clear
         canvas.frame = contentView.bounds
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         contentView.addSubview(canvas)
@@ -199,10 +201,10 @@ final class ThreadCell: UITableViewCell {
 
     required init?(coder: NSCoder) { nil }
 
-    func configure(row: ThreadRow, text: RowText) {
+    func configure(row: ThreadRow, text: RowText, first: Bool) {
         canvas.row = row
         canvas.text = text
-        backgroundColor = row.unread ? Tokens.card.platform : Tokens.muted.platform
+        canvas.first = first
         canvas.setNeedsDisplay()
         accessibilityLabel = "\(row.unread ? "Unread, " : "")\(row.senders), \(row.subject), \(row.date)"
     }
@@ -211,9 +213,14 @@ final class ThreadCell: UITableViewCell {
 private final class RowCanvas: UIView {
     var row: ThreadRow?
     var text: RowText?
+    var first = false
 
     override func draw(_ rect: CGRect) {
         guard let row, let text else { return }
+        if !first {
+            Tokens.border.platform.setFill()
+            UIRectFill(CGRect(x: 0, y: 0, width: bounds.width, height: Theme.hairline))
+        }
         Theme.accountColor(row.color).platform.setFill()
         UIRectFill(CGRect(x: 0, y: 0, width: Theme.accountBarWidth, height: bounds.height))
         let left: CGFloat = 16

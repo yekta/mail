@@ -21,7 +21,7 @@ body { font: 15px/1.55 "Avenir", -apple-system, BlinkMacSystemFont, "Helvetica N
 a { color: var(--primary); }
 img { max-width: 100%; height: auto; }
 .plain { white-space: pre-wrap; }
-blockquote { margin: 0 0 0 2px; padding-left: 12px; border-left: 2px solid var(--border); color: var(--muted-foreground); }
+blockquote { margin: 0 0 0 2px; padding-left: 12px; border-left: 2px solid var(--card-border); color: var(--muted-foreground); }
 details.quote > summary { list-style: none; display: inline-block; cursor: pointer; padding: 0 8px; margin: 6px 0;
   border-radius: 9px; background: var(--muted); color: var(--muted-foreground); font-size: 12px; line-height: 18px; letter-spacing: 1px; }
 details.quote > summary::-webkit-details-marker { display: none; }
