@@ -1,7 +1,8 @@
 import SwiftUI
 import WebKit
 
-/// The web views that draw message bodies, kept and reused: making one is the slow part.
+/// The web views that draw message bodies, kept and reused: making one is the slow part. Their
+/// store is on disk, so a message's images come from the cache the next time the app opens.
 @MainActor
 final class WebViewPool {
     static let shared = WebViewPool()
@@ -10,7 +11,7 @@ final class WebViewPool {
     private let heights = HeightReporter()
     private lazy var configuration: WKWebViewConfiguration = {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         let script = """
             (function () {
@@ -28,6 +29,12 @@ final class WebViewPool {
         configuration.userContentController.add(heights, contentWorld: .defaultClient, name: "height")
         return configuration
     }()
+
+    /// Starts WebKit before the first message shows, so the first card isn't the one that waits.
+    func warm() {
+        guard spare.isEmpty else { return }
+        give(take())
+    }
 
     func take() -> MessageWKWebView {
         if let view = spare.popLast() { return view }
