@@ -5,7 +5,7 @@ import SwiftUI
 enum Tokens {
     static let radius: CGFloat = 6
 
-    static let background = ThemeColor(light: 0xf1f2f3, dark: 0x121414)
+    static let background = ThemeColor(light: 0xf8f9fa, dark: 0x161819)
     static let foreground = ThemeColor(light: 0x434b52, dark: 0xf1f1f1)
     static let card = ThemeColor(light: 0xffffff, dark: 0x1a1c1e)
     static let cardForeground = ThemeColor(light: 0x434b52, dark: 0xf1f1f1)
