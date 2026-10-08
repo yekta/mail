@@ -86,7 +86,7 @@ enum Theme {
     static let accountBarWidth: CGFloat = 2
     /// The widest the list and the thread's card grow on the Mac.
     static let cardWidth: CGFloat = 1000
-    static let sidebarWidth: CGFloat = 232
+    static let sidebarWidth: CGFloat = 256
 
     static let accountColors = [
         Tokens.account1, Tokens.account2, Tokens.account3, Tokens.account4, Tokens.account5,
