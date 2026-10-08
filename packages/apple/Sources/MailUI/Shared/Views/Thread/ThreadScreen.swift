@@ -69,7 +69,7 @@ struct ThreadScreen: View {
             ScrollView {
                 page
                     #if os(macOS)
-                    .padding(.top, Space.l)
+                    .padding(.vertical, Space.l)
                     .padding(.horizontal, Space.xl + 4)
                     #endif
                     .frame(maxWidth: .infinity, minHeight: height, alignment: .top)
