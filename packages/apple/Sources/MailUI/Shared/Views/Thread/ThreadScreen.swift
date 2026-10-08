@@ -234,11 +234,11 @@ struct MessageCard: View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack(alignment: .center, spacing: Space.m) {
                 Avatar(initials: message.initials, email: message.fromEmail, size: 34)
-                    .onTapGesture { if !folded { showPerson() } }
+                    .onTapGesture(perform: tapSender)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(message.fromName)
                         .textStyle(folded ? .body : .subheading, color: folded ? Tokens.mutedMoreForeground.color : Tokens.foreground.color)
-                        .onTapGesture { if !folded { showPerson() } }
+                        .onTapGesture(perform: tapSender)
                         .help(folded ? "" : message.fromEmail)
                     Text(folded ? message.snippet : message.to).textStyle(.caption).lineLimit(1)
                 }
@@ -280,6 +280,12 @@ struct MessageCard: View {
         #else
         0
         #endif
+    }
+
+    /// A sender's own tap gesture takes the click from the card's, so a folded message unfolds here too.
+    private func tapSender() {
+        guard folded else { return showPerson() }
+        store.unfoldedMessages.insert(message.id)
     }
 
     private var original: Bool { store.originalMessages.contains(message.id) }

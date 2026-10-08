@@ -81,16 +81,43 @@ extension Sheet where Trailing == EmptyView {
 
 /// A bar across the top of a page or a sheet on the Mac: what leads, the title in the middle,
 /// and what trails.
-struct HeaderBar<Leading: View, Trailing: View>: View {
+struct HeaderBar<Leading: View, Center: View, Trailing: View>: View {
     var title: String?
-    @ViewBuilder let leading: Leading
-    @ViewBuilder let trailing: Trailing
+    let leading: Leading
+    let center: Center?
+    let trailing: Trailing
+
+    /// Leading at the left, trailing at the right, and `center` in the middle of the bar: it takes
+    /// its own width and the sides split the rest.
+    init(
+        title: String? = nil, @ViewBuilder leading: () -> Leading, @ViewBuilder center: () -> Center,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.leading = leading()
+        self.center = center()
+        self.trailing = trailing()
+    }
+
+    init(title: String? = nil, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing)
+    where Center == EmptyView {
+        self.title = title
+        self.leading = leading()
+        self.center = nil
+        self.trailing = trailing()
+    }
 
     var body: some View {
         HStack(spacing: Space.s + 2) {
-            leading
-            Spacer()
-            trailing
+            if let center {
+                HStack(spacing: Space.s + 2) { leading }.frame(maxWidth: .infinity, alignment: .leading)
+                center.layoutPriority(1)
+                HStack(spacing: Space.s + 2) { trailing }.frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                leading
+                Spacer()
+                trailing
+            }
         }
         .overlay {
             if let title {

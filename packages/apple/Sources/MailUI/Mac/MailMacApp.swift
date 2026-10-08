@@ -171,31 +171,48 @@ struct MacTopBar: View {
     @State private var query = ""
 
     var body: some View {
-        HeaderBar {
-            IconButton(symbol: .menu, help: "Mailboxes", circled: false, action: showSidebar)
-            if let open = store.conversation {
-                IconButton(symbol: .arrowLeft, help: "Back (Esc)") { store.close() }
-                Spacer()
-                ThreadActions(thread: open.id)
-                Spacer()
-            } else if !store.selection.isEmpty {
-                SelectionBar()
+        Group {
+            if store.conversation == nil, !store.selection.isEmpty {
+                HeaderBar {
+                    menu
+                    SelectionBar()
+                } trailing: {
+                    compose
+                }
             } else {
-                SearchField(
-                    placeholder: "Search", text: $query, style: .bar, autofocus: false, focusTrigger: focusSearch,
-                    submit: { store.search(query) }, escape: store.endSearch, clear: store.endSearch
-                )
-                .frame(maxWidth: 240)
-                Spacer()
-                MailboxTabs()
-                Spacer()
+                HeaderBar {
+                    menu
+                    if store.conversation != nil {
+                        IconButton(symbol: .arrowLeft, help: "Back (Esc)") { store.close() }
+                    } else {
+                        SearchField(
+                            placeholder: "Search", text: $query, style: .bar, autofocus: false, focusTrigger: focusSearch,
+                            submit: { store.search(query) }, escape: store.endSearch, clear: store.endSearch
+                        )
+                        .frame(maxWidth: 240)
+                    }
+                } center: {
+                    if let open = store.conversation {
+                        ThreadActions(thread: open.id)
+                    } else {
+                        MailboxTabs()
+                    }
+                } trailing: {
+                    compose
+                }
             }
-        } trailing: {
-            ActionButton(title: "Compose", symbol: .squarePen, variant: .outline, action: store.newMessage)
         }
         .onAppear { query = store.searchQuery }
         .onChange(of: query) { _, text in store.search(text) }
         .onChange(of: store.searchQuery) { _, text in if text.isEmpty { query = "" } }
+    }
+
+    private var menu: some View {
+        IconButton(symbol: .menu, help: "Mailboxes", circled: false, action: showSidebar)
+    }
+
+    private var compose: some View {
+        ActionButton(title: "Compose", symbol: .squarePen, variant: .outline, action: store.newMessage)
     }
 }
 #endif
