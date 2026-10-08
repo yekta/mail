@@ -42,15 +42,16 @@ enum Platform {
         return base.appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.yekta.mail", isDirectory: true)
     }
 
-    /// Avenir Next, which both systems ship, at an exact size.
+    /// Avenir, which both systems ship, at an exact size. Its weights step from Medium straight
+    /// to Heavy, so Medium is the semibold and Heavy the bold.
     static func face(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> PlatformFont {
         let name = switch weight {
-        case .ultraLight, .thin, .light: "AvenirNext-UltraLight"
-        case .medium: "AvenirNext-Medium"
-        case .semibold: "AvenirNext-DemiBold"
-        case .bold: "AvenirNext-Bold"
-        case .heavy, .black: "AvenirNext-Heavy"
-        default: "AvenirNext-Regular"
+        case .ultraLight, .thin: "Avenir-Light"
+        case .light: "Avenir-Book"
+        case .medium, .semibold: "Avenir-Medium"
+        case .bold, .heavy: "Avenir-Heavy"
+        case .black: "Avenir-Black"
+        default: "Avenir-Roman"
         }
         guard let font = PlatformFont(name: name, size: size) else {
             return .systemFont(ofSize: size, weight: weight)
@@ -58,14 +59,14 @@ enum Platform {
         return font
     }
 
-    /// Avenir Next at a Mac size, enlarged on iOS.
+    /// Avenir at a Mac size, enlarged on iOS.
     static func font(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> PlatformFont {
         face(size * scale, weight)
     }
 }
 
 extension Font {
-    /// Avenir Next at a Mac size, enlarged on iOS.
+    /// Avenir at a Mac size, enlarged on iOS.
     static func ui(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> Font {
         Font(Platform.font(size, weight) as CTFont)
     }
