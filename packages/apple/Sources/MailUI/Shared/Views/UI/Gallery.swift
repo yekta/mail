@@ -11,6 +11,7 @@ struct GalleryView: View {
     @State private var segment = "Light"
     @State private var choice: String? = "Work"
     @State private var tab = "important"
+    @State private var swatch = "account-3"
 
     private struct Tab: Identifiable, Hashable {
         let id: String
@@ -134,6 +135,7 @@ struct GalleryView: View {
                             Avatar(initials: "GH", email: "grace@example.com", size: 34)
                             Avatar(initials: "K", email: "k@example.com")
                         }
+                        SwatchRow(selected: swatch) { swatch = $0 }
                     }
                 }
                 .padding(Space.xxl)

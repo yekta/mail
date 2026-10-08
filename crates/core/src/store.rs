@@ -399,12 +399,21 @@ impl Store {
         let tx = self.db.transaction()?;
         let mut applied = Applied::default();
         let touched = &mut applied.touched;
+        let pending = pending_ops(&tx)?;
         for account in batch.accounts {
             touched.mailboxes = true;
             if account.deleted {
                 remove_account(&tx, &account.id, &mut touched.threads)?;
                 continue;
             }
+            // A colour chosen here and not yet confirmed by the server wins.
+            let color = pending
+                .iter()
+                .find_map(|(_, op)| match op {
+                    Op::SetAccountColor { account_id, color } if *account_id == account.id => Some(color.as_str()),
+                    _ => None,
+                })
+                .unwrap_or(&account.color);
             tx.execute(
                 "INSERT INTO accounts (id, provider, address, status, color, identities) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, address = excluded.address,
@@ -414,7 +423,7 @@ impl Store {
                     account.provider.as_str(),
                     account.address,
                     account.status,
-                    account.color,
+                    color,
                     serde_json::to_string(&account.identities)?
                 ],
             )?;
@@ -430,7 +439,6 @@ impl Store {
                 )?,
             };
         }
-        let pending = pending_ops(&tx)?;
         let mut resplit = false;
         for preference in batch.preferences {
             // What the user changed here and the server hasn't confirmed yet wins.
@@ -521,16 +529,20 @@ impl Store {
     /// Shows an op at once and keeps it for the server.
     pub fn apply_local(&mut self, op_id: &str, op: &Op) -> Result<Touched> {
         let tx = self.db.transaction()?;
-        // A newer value of a preference or a draft replaces one still waiting.
+        // A newer value of a preference, a draft or an account's colour replaces one still waiting.
         let replaces = |earlier: &Op| match (earlier, op) {
             (Op::SetPreference { key, .. }, Op::SetPreference { key: new, .. }) => key == new,
+            (Op::SetAccountColor { account_id, .. }, Op::SetAccountColor { account_id: new, .. }) => account_id == new,
             (Op::SaveDraft { draft_id, .. } | Op::DeleteDraft { draft_id }, Op::SaveDraft { draft_id: new, .. })
             | (Op::SaveDraft { draft_id, .. } | Op::DeleteDraft { draft_id }, Op::DeleteDraft { draft_id: new }) => {
                 draft_id == new
             }
             _ => false,
         };
-        if matches!(op, Op::SetPreference { .. } | Op::SaveDraft { .. } | Op::DeleteDraft { .. }) {
+        if matches!(
+            op,
+            Op::SetPreference { .. } | Op::SetAccountColor { .. } | Op::SaveDraft { .. } | Op::DeleteDraft { .. }
+        ) {
             for (earlier, _) in pending_ops(&tx)?.into_iter().filter(|(_, earlier)| replaces(earlier)) {
                 tx.execute("DELETE FROM outbox WHERE op_id = ?1", [earlier])?;
             }
@@ -1325,10 +1337,14 @@ fn waiting_by_message(pending: &[(String, Op)]) -> HashMap<&str, Vec<&Op>> {
     waiting
 }
 
-/// What an op that isn't on messages does here: a preference, a draft, a label.
+/// What an op that isn't on messages does here: a preference, a draft, a label, a colour.
 fn local_effect(tx: &Transaction, op: &Op) -> Result<Touched> {
     let mut touched = Touched::default();
     match op {
+        Op::SetAccountColor { account_id, color } => {
+            tx.execute("UPDATE accounts SET color = ?2 WHERE id = ?1", params![account_id, color])?;
+            touched.mailboxes = true;
+        }
         Op::SetPreference { key, value } => {
             set_preference(tx, key, value.as_ref())?;
             touched.preferences = true;

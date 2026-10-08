@@ -90,6 +90,37 @@ async fn an_op_sent_twice_is_applied_once_and_holds_off_stale_provider_state(db:
 }
 
 #[sqlx::test]
+async fn an_account_colour_is_kept_for_its_user_only(db: PgPool) {
+    let server = Server::start(db.clone()).await;
+    let user = db::create_user(&db).await.unwrap();
+    let account = NewAccount {
+        user_id: user,
+        provider: Provider::Jmap,
+        address: "ann@example.com",
+        login: "l",
+        credentials: vec![],
+    };
+    let account_id = db::upsert_account(&db, account).await.unwrap();
+    let (_, _, cursor, _) = changes(&server, user, 0).await;
+    let set = |color: &str| Op::SetAccountColor { account_id: account_id.to_string(), color: color.into() };
+
+    let outcome = ops::apply(&server.state, user, "1", set("account-7")).await.unwrap();
+    assert!(matches!(outcome, ops::Outcome::Done { ok: true, .. }));
+    let ServerMessage::Changes { accounts, .. } = crate::changes::read(&db, user, cursor).await.unwrap() else {
+        panic!("not changes");
+    };
+    assert_eq!(accounts[0].color, "account-7");
+
+    let outcome = ops::apply(&server.state, user, "2", set("red")).await.unwrap();
+    assert!(matches!(outcome, ops::Outcome::Done { ok: false, .. }));
+    let other = db::create_user(&db).await.unwrap();
+    let outcome = ops::apply(&server.state, other, "3", set("account-3")).await.unwrap();
+    assert!(matches!(outcome, ops::Outcome::Done { ok: false, .. }));
+    let color: String = sqlx::query_scalar("SELECT color FROM accounts").fetch_one(&db).await.unwrap();
+    assert_eq!(color, "account-7");
+}
+
+#[sqlx::test]
 async fn preferences_and_drafts_sync_and_leave_tombstones(db: PgPool) {
     let server = Server::start(db.clone()).await;
     let user = db::create_user(&db).await.unwrap();

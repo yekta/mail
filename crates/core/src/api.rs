@@ -182,6 +182,11 @@ pub enum Command {
     RemoveAccount {
         account: String,
     },
+    /// `color` is `account-1` to `account-10`. `{}`.
+    SetAccountColor {
+        account: String,
+        color: String,
+    },
     /// `{unified: [Mailbox], accounts: [AccountView]}`.
     Mailboxes,
     /// A `ThreadPage`.
