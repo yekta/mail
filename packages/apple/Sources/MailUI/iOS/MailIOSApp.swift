@@ -1,7 +1,8 @@
 #if os(iOS)
 import SwiftUI
 
-/// The iOS app: mailboxes, then a mailbox's threads, then a thread, in one navigation stack.
+/// The iOS app: a mailbox's threads, then a thread, in one navigation stack, with the mailboxes
+/// kept as tabs along the bottom and every mailbox in the drawer.
 public struct MailIOSApp: App {
     @State private var store = MailStore()
 
@@ -24,11 +25,6 @@ public struct MailIOSApp: App {
     }
 }
 
-enum Route: Hashable {
-    case mailbox(String)
-    case thread(String)
-}
-
 struct IOSRoot: View {
     @Environment(MailStore.self) private var store
 
@@ -41,83 +37,88 @@ struct IOSRoot: View {
             } else if !store.signedIn {
                 OnboardingView()
             } else {
-                IOSStack(start: restored)
+                IOSShell(start: store.conversation.map { [$0.id] } ?? [])
+                    .ignoresSafeArea()
             }
         }
         .overlay(alignment: .bottom) { ToastView() }
         .sheet(item: $store.compose) { compose in ComposeView(compose: compose).environment(store) }
         .mailSheets(store)
     }
-
-    /// The screens the app was left on: the mailbox, and the thread open in it.
-    private var restored: [Route] {
-        guard let open = store.conversation?.id else { return [.mailbox(store.mailbox)] }
-        return [.mailbox(store.mailbox), .thread(open)]
-    }
 }
 
-/// The navigation stack, starting on the screens the app was left on.
-struct IOSStack: View {
+/// The drawer with the mailboxes, over the navigation stack of the mailbox on screen and the
+/// threads opened in it, starting on the thread the app was left on.
+struct IOSShell: View {
     @Environment(MailStore.self) private var store
-    @State private var path: [Route]
+    @State private var path: [String]
+    @State private var editing = false
+    @State private var drawerOpen = false
 
-    init(start: [Route]) {
+    init(start: [String]) {
         _path = State(initialValue: start)
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            SidebarView(showSettings: { store.settingsOpen = true }, picked: { path.append(.mailbox($0)) })
-                .navigationTitle("Mailboxes")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(Tokens.background.color, for: .navigationBar)
-                .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .mailbox: MailboxScreen(path: $path)
-                    case .thread(let id): ThreadScreenIOS(thread: id)
-                    }
-                }
+        DrawerView(isOpen: $drawerOpen, enabled: path.isEmpty && !editing) {
+            SidebarView(showSettings: showSettings, picked: { _ in close() })
+                .environment(store)
+                .preferredColorScheme(store.appearance.scheme)
+        } content: {
+            NavigationStack(path: $path) {
+                MailboxScreen(path: $path, editing: $editing, openDrawer: { drawerOpen = true })
+                    .navigationDestination(for: String.self) { ThreadScreenIOS(thread: $0) }
+            }
+            .tint(Tokens.primary.color)
+            .environment(store)
+            .preferredColorScheme(store.appearance.scheme)
         }
-        .tint(Tokens.primary.color)
         .onChange(of: store.requestedThread) { _, thread in
             guard let thread else { return }
             store.requestedThread = nil
-            path = [.mailbox(store.mailbox), .thread(thread)]
+            drawerOpen = false
+            path = [thread]
         }
         .onChange(of: store.baseMailbox) {
-            path.removeAll { if case .thread = $0 { true } else { false } }
+            path = []
+            editing = false
         }
+    }
+
+    private func close() {
+        drawerOpen = false
+        path = []
+    }
+
+    private func showSettings() {
+        drawerOpen = false
+        store.settingsOpen = true
     }
 }
 
 /// A mailbox's threads, with search and compose; in edit mode, threads to act on together.
 struct MailboxScreen: View {
     @Environment(MailStore.self) private var store
-    @Binding var path: [Route]
+    @Binding var path: [String]
+    @Binding var editing: Bool
+    let openDrawer: () -> Void
     @State private var query = ""
-    @State private var editing = false
 
     var body: some View {
         VStack(spacing: 0) {
-            if !store.tabs.isEmpty, store.searchRows == nil {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    MailboxTabs().padding(.horizontal, Space.m).padding(.vertical, Space.xs)
-                }
-                .background(Tokens.background.color)
-                .rule(.bottom)
-            }
             ListHeader()
             // The table stays through a change of mailbox, with the empty state over it when there
             // is nothing to show, so it isn't made anew and the page never goes blank between.
             ThreadListIOS(store: store, rows: store.visibleRows, editing: editing, checked: store.selection, ready: store.listReady) { thread in
                 let draft = store.row(thread)?.draftId != nil
                 store.open(thread)
-                if !draft { path.append(.thread(thread)) }
+                if !draft { path.append(thread) }
             }
             .ignoresSafeArea(edges: .bottom)
             .overlay {
                 if store.listEmpty { EmptyList().background(Tokens.background.color) }
             }
+            if !editing { MailboxTabBar() }
         }
         .navigationTitle(editing ? "\(store.selection.count) Selected" : store.mailboxName)
         .navigationBarTitleDisplayMode(.inline)
@@ -138,6 +139,9 @@ struct MailboxScreen: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button(action: openDrawer) { Image(.menu, size: 18) }.accessibilityLabel("Mailboxes")
+        }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Menu {
                 Button { editing = true } label: { Label { Text("Select") } icon: { Image(.squareCheck, size: 15) } }
@@ -173,6 +177,22 @@ struct MailboxScreen: View {
         ToolbarItemGroup(placement: .bottomBar) {
             CommandBar(threads: threads)
                 .disabled(threads.isEmpty)
+        }
+    }
+}
+
+/// The mailboxes kept as tabs, along the bottom; gone while the search field is up.
+struct MailboxTabBar: View {
+    @Environment(MailStore.self) private var store
+    @Environment(\.isSearching) private var searching
+
+    var body: some View {
+        if !store.tabs.isEmpty, !searching {
+            BottomTabs(
+                tabs: store.tabs, selected: store.searchRows == nil ? store.baseMailbox : nil,
+                symbol: { Symbol.named($0.symbol) }, title: { store.tabName($0, shownIn: store.listAccount) }, count: \.unread,
+                pick: { store.select(mailbox: $0.id) }
+            )
         }
     }
 }

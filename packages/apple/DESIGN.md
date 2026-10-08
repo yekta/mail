@@ -61,6 +61,7 @@ added to the component, not to the view.
 | `PopupCard` | A card over the page for suggestions |
 | `TabStrip` | Tabs on a line with counts |
 | `PillTabs` | Tabs on a line with an icon and a count, the chosen one filled in a rounded rectangle; dragged to reorder, with a menu on each |
+| `BottomTabs` | Tabs across the bottom of the screen, full width, each an icon over its name and count (iOS) |
 | `SectionHeading`, `FormSection` | A section's name in capitals, with its controls |
 | `Card`, `FormButtons` | A rounded card, and Save and Cancel under a form |
 | `Notice` | A line about something, muted or in error tone, with an optional action |

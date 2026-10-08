@@ -2,8 +2,8 @@
 import SwiftUI
 import UIKit
 
-/// The thread list on iOS: a table that only makes the rows on screen, with Newton's swipes —
-/// right to archive or mark read, left to snooze or delete. In edit mode, rows are picked.
+/// The thread list on iOS: a table that only makes the rows on screen. A swipe to the left
+/// deletes, snoozes or archives; one to the right opens the drawer. In edit mode, rows are picked.
 struct ThreadListIOS: UIViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
@@ -165,16 +165,6 @@ struct ThreadListIOS: UIViewRepresentable {
             return action
         }
 
-        func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-            let row = rows[indexPath.row]
-            let store = store
-            guard row.draftId == nil else { return UISwipeActionsConfiguration(actions: []) }
-            return UISwipeActionsConfiguration(actions: [
-                swipe("Archive", .archive, Tokens.success) { store.run(.archive, on: [row.id]) },
-                swipe(row.unread ? "Read" : "Unread", row.unread ? .mailOpen : .mail, Tokens.primary) { store.run(.read, on: [row.id]) },
-            ])
-        }
-
         func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
             let row = rows[indexPath.row]
             let store = store
@@ -183,6 +173,7 @@ struct ThreadListIOS: UIViewRepresentable {
             return UISwipeActionsConfiguration(actions: [
                 delete,
                 swipe(store.remindsInsteadOfSnoozing ? "Remind" : "Snooze", .clock, Tokens.warning) { store.run(.snooze, on: [row.id]) },
+                swipe("Archive", .archive, Tokens.success) { store.run(.archive, on: [row.id]) },
             ])
         }
     }
