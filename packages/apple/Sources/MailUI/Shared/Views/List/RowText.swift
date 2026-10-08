@@ -25,7 +25,7 @@ struct RowText {
     private static func style(_ size: CGFloat, _ weight: PlatformFont.Weight, _ color: ThemeColor) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
-        return [.font: PlatformFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color.platform, .paragraphStyle: paragraph]
+        return [.font: Platform.face(size, weight), .foregroundColor: color.platform, .paragraphStyle: paragraph]
     }
 
     init(_ row: ThreadRow) {

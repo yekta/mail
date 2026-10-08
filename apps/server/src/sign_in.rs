@@ -29,7 +29,7 @@ fn back(parameters: &[(&str, &str)]) -> Response {
 fn failed(message: &str) -> Response {
     let page = format!(
         "<!doctype html><meta name=viewport content=\"width=device-width\"><title>Sign-in failed</title>\
-         <style>{}body{{font:15px -apple-system,system-ui,sans-serif;background:var(--background);color:var(--foreground);\
+         <style>{}body{{font:15px \"Avenir Next\",-apple-system,system-ui,sans-serif;background:var(--background);color:var(--foreground);\
          display:grid;place-items:center;height:90vh;margin:0}}</style><p>{}</p>",
         include_str!("../../../packages/theme/tokens.css"),
         message
