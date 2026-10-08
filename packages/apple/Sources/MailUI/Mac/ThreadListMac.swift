@@ -331,14 +331,14 @@ final class ThreadRowView: NSTableRowView {
         Self.drawLine(text.senders, x: left + Self.sendersX, width: Self.sendersWidth, middle: middle)
         var x = left + Self.sendersX + Self.sendersWidth + 14
         if row.attachment {
-            Self.drawSymbol(.paperclip, in: NSRect(x: x, y: middle - 7, width: 14, height: 14), color: Tokens.mutedForeground.platform)
+            Self.drawSymbol(.paperclip, in: NSRect(x: x, y: middle - 7, width: 14, height: 14), color: Tokens.mutedMoreForeground.platform)
         }
         x += 24
         let trailing: CGFloat
         if hovering {
             trailing = (actions.last?.2.minX ?? starRect.minX) - 16
             for (_, symbol, rect) in actions {
-                Self.drawSymbol(symbol, in: rect, color: Tokens.secondaryForeground.platform)
+                Self.drawSymbol(symbol, in: rect, color: Tokens.mutedForeground.platform)
             }
         } else {
             let dateWidth = ceil(text.date.size().width)

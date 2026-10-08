@@ -35,12 +35,12 @@ struct Chip: View {
             }
             Text(title).font(.ui(12)).lineLimit(1).truncationMode(.middle)
             if let detail {
-                Text(detail).font(.ui(11)).foregroundStyle(Tokens.mutedForeground.color).lineLimit(1)
+                Text(detail).font(.ui(11)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
             }
             if let remove {
                 Button(action: remove) { Image(.x, size: 11) }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Tokens.mutedForeground.color)
+                    .foregroundStyle(Tokens.mutedMoreForeground.color)
                     .accessibilityLabel("Remove \(title)")
             }
         }

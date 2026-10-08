@@ -90,8 +90,8 @@ struct MacRoot: View {
             )
         }
         .frame(width: Theme.sidebarWidth)
-        .background(Tokens.sidebar.color)
-        .overlay(alignment: .trailing) { Rectangle().fill(Tokens.sidebarBorder.color).frame(width: 1) }
+        .background(Tokens.card.color)
+        .overlay(alignment: .trailing) { Rectangle().fill(Tokens.border.color).frame(width: 1) }
         .transition(.move(edge: .leading))
     }
 
@@ -103,7 +103,7 @@ struct MacRoot: View {
         VStack(spacing: 0) {
             Text(store.conversation == nil && store.compose == nil ? store.mailboxName : "")
                 .font(.ui(13, .medium))
-                .foregroundStyle(Tokens.secondaryForeground.color)
+                .foregroundStyle(Tokens.mutedForeground.color)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 .allowsHitTesting(false)
@@ -185,7 +185,7 @@ struct MacTopBar: View {
                 SelectionBar()
             } else {
                 HStack(spacing: 8) {
-                    Image(.search, size: 14).foregroundStyle(Tokens.mutedForeground.color)
+                    Image(.search, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color)
                     TextField("Search", text: $query)
                         .textFieldStyle(.plain)
                         .font(.ui(13))
@@ -202,7 +202,7 @@ struct MacTopBar: View {
                             query = ""
                             store.endSearch()
                         } label: {
-                            Image(.x, size: 12).foregroundStyle(Tokens.mutedForeground.color)
+                            Image(.x, size: 12).foregroundStyle(Tokens.mutedMoreForeground.color)
                         }
                         .buttonStyle(.plain)
                     }
@@ -229,8 +229,8 @@ struct EmptyList: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedForeground.color.opacity(0.6))
-            Text(message).font(.ui(15)).foregroundStyle(Tokens.mutedForeground.color)
+            Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedMostForeground.color)
+            Text(message).font(.ui(15)).foregroundStyle(Tokens.mutedMoreForeground.color)
         }
     }
 

@@ -162,7 +162,7 @@ struct ThreadListIOS: UIViewRepresentable {
             let store = store
             guard row.draftId == nil else { return UISwipeActionsConfiguration(actions: []) }
             return UISwipeActionsConfiguration(actions: [
-                swipe("Archive", .archive, Tokens.chart4) { store.run(.archive, on: [row.id]) },
+                swipe("Archive", .archive, Tokens.success) { store.run(.archive, on: [row.id]) },
                 swipe(row.unread ? "Read" : "Unread", row.unread ? .mailOpen : .mail, Tokens.primary) { store.run(.read, on: [row.id]) },
             ])
         }
@@ -174,7 +174,7 @@ struct ThreadListIOS: UIViewRepresentable {
             guard row.draftId == nil else { return UISwipeActionsConfiguration(actions: [delete]) }
             return UISwipeActionsConfiguration(actions: [
                 delete,
-                swipe(store.remindsInsteadOfSnoozing ? "Remind" : "Snooze", .clock, Tokens.chart3) { store.run(.snooze, on: [row.id]) },
+                swipe(store.remindsInsteadOfSnoozing ? "Remind" : "Snooze", .clock, Tokens.warning) { store.run(.snooze, on: [row.id]) },
             ])
         }
     }
@@ -231,7 +231,7 @@ private final class RowCanvas: UIView {
         var subjectWidth = right - left
         if row.attachment {
             let clip = CGRect(x: right - 15, y: 38, width: 15, height: 15)
-            UIImage.symbol(.paperclip, side: 15).withTintColor(Tokens.mutedForeground.platform, renderingMode: .alwaysOriginal).draw(in: clip)
+            UIImage.symbol(.paperclip, side: 15).withTintColor(Tokens.mutedMoreForeground.platform, renderingMode: .alwaysOriginal).draw(in: clip)
             subjectWidth -= 22
         }
         draw(text.subject, x: left, y: 36, width: subjectWidth)

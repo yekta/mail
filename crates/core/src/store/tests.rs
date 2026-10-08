@@ -19,7 +19,7 @@ fn account() -> Account {
         provider: Provider::Jmap,
         address: "me@example.com".into(),
         status: "ready".into(),
-        color: "chart-1".into(),
+        color: "account-1".into(),
         identities: vec![Identity { name: None, email: "alias@example.com".into(), signature: None }],
         deleted: false,
         rev: 1,

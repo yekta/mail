@@ -18,7 +18,7 @@ struct ToastView: View {
             .padding(.horizontal, 18)
             .frame(height: 40 * Platform.scale)
             .foregroundStyle(Tokens.popoverForeground.color)
-            .background(Capsule().fill(Tokens.popover.color).shadow(color: .black.opacity(0.18), radius: 12, y: 4))
+            .background(Capsule().fill(Tokens.popover.color).shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 12, y: 4))
             .overlay(Capsule().strokeBorder(Tokens.border.color, lineWidth: 1))
             .padding(.bottom, 20)
             .task(id: toast.id) {

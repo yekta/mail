@@ -22,7 +22,7 @@ struct SettingsView: View {
                             Circle().fill(Theme.accountColor(account.color).color).frame(width: 8, height: 8)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(account.address).font(.ui(14))
-                                Text(status(account)).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                                Text(status(account)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
                             }
                             Spacer()
                             ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
@@ -63,8 +63,8 @@ struct SettingsView: View {
                     .fixedSize()
                 }
                 SettingsSection(title: "Server") {
-                    Text(store.server).font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color).textSelection(.enabled)
-                    Text(connectionText).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                    Text(store.server).font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color).textSelection(.enabled)
+                    Text(connectionText).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
                 #if os(macOS)
                 SettingsSection(title: "Updates", detail: "New versions are downloaded and installed on their own; a restart finishes them.") {
@@ -72,7 +72,7 @@ struct SettingsView: View {
                 }
                 #else
                 SettingsSection(title: "Version") {
-                    Text("Wonnet \(Platform.version)").font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color)
+                    Text("Wonnet \(Platform.version)").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
                 }
                 #endif
                 ActionButton(title: "Sign out", symbol: .logOut, variant: .destructive) {
@@ -117,7 +117,7 @@ private struct UpdateSettings: View {
     var body: some View {
         let updater = store.updater
         HStack(spacing: 12) {
-            Text("Wonnet \(updater.current)").font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color)
+            Text("Wonnet \(updater.current)").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
             Spacer()
             switch updater.state {
             case .ready: ActionButton(title: "Restart", variant: .primary) { updater.relaunch() }
@@ -126,7 +126,7 @@ private struct UpdateSettings: View {
             }
         }
         if let status {
-            Text(status).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).fixedSize(horizontal: false, vertical: true)
+            Text(status).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -152,9 +152,9 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title.uppercased()).font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedForeground.color)
+                Text(title.uppercased()).font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 if let detail {
-                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).fixedSize(horizontal: false, vertical: true)
+                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize(horizontal: false, vertical: true)
                 }
             }
             content

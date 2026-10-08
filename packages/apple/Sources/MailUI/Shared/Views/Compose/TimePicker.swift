@@ -23,7 +23,7 @@ struct TimePicker: View {
                     ChoiceRow(title: choice.name, detail: choice.label, highlighted: index == highlighted) { pick(choice) }
                 }
                 if choices.isEmpty, !text.isEmpty {
-                    Text("That isn't a time I can read.").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color).padding(.vertical, 8)
+                    Text("That isn't a time I can read.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color).padding(.vertical, 8)
                 }
             }
             HStack {
@@ -72,7 +72,7 @@ struct SnippetPicker: View {
             Text("Snippets").font(.ui(14, .semibold)).foregroundStyle(Tokens.foreground.color)
             if snippets.isEmpty {
                 Text("Add snippets in Settings, then type ; and a name to put one in.")
-                    .font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                    .font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
             } else {
                 InputField(label: "Find", text: $query, placeholder: "Name", autofocus: true)
                     .onSubmit {

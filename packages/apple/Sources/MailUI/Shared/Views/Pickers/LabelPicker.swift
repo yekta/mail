@@ -62,7 +62,7 @@ struct LabelPicker: View {
                         if choices.isEmpty {
                             Text("No labels yet. Type a name to make one.")
                                 .font(.ui(13))
-                                .foregroundStyle(Tokens.mutedForeground.color)
+                                .foregroundStyle(Tokens.mutedMoreForeground.color)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
                         }

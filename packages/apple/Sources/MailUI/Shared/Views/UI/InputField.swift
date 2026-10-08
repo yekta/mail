@@ -13,7 +13,7 @@ struct InputField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.ui(11, .medium)).foregroundStyle(Tokens.mutedForeground.color)
+            Text(label).font(.ui(11, .medium)).foregroundStyle(Tokens.mutedMoreForeground.color)
             Group {
                 if secure {
                     SecureField(placeholder, text: $text)
@@ -22,7 +22,7 @@ struct InputField: View {
                         .scrollContentBackground(.hidden)
                         .overlay(alignment: .topLeading) {
                             if text.isEmpty {
-                                Text(placeholder).foregroundStyle(Tokens.mutedForeground.color).padding(.leading, 5).allowsHitTesting(false)
+                                Text(placeholder).foregroundStyle(Tokens.mutedMoreForeground.color).padding(.leading, 5).allowsHitTesting(false)
                             }
                         }
                         .padding(.vertical, 8)

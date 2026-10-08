@@ -11,7 +11,7 @@ struct ToggleRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.ui(14)).foregroundStyle(Tokens.foreground.color)
                 if let detail {
-                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
             }
         }

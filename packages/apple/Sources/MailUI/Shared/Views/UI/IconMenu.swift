@@ -12,7 +12,7 @@ struct IconMenu<Content: View>: View {
             content
         } label: {
             Image(symbol, size: 15)
-                .foregroundStyle(Tokens.secondaryForeground.color)
+                .foregroundStyle(Tokens.mutedForeground.color)
                 .frame(width: 32 * Platform.scale, height: 32 * Platform.scale)
                 .overlay(Circle().strokeBorder(circled ? Tokens.border.color : .clear, lineWidth: 1))
                 .contentShape(Circle())

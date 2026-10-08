@@ -20,7 +20,7 @@ struct SplitSettings: View {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(split.name).font(.ui(14))
-                            Text(summary(split)).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).lineLimit(1)
+                            Text(summary(split)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
                         }
                         Spacer()
                         IconButton(symbol: .chevronUp, help: "Move up") { move(splits, from: index, by: -1) }
@@ -116,11 +116,11 @@ struct BlockedSettings: View {
             .sorted()
         VStack(alignment: .leading, spacing: 8) {
             if blocked.isEmpty {
-                Text("No one is blocked.").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                Text("No one is blocked.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
             }
             ForEach(blocked, id: \.self) { address in
                 HStack(spacing: 10) {
-                    Image(.ban, size: 13).foregroundStyle(Tokens.mutedForeground.color)
+                    Image(.ban, size: 13).foregroundStyle(Tokens.mutedMoreForeground.color)
                     Text(address).font(.ui(14))
                     Spacer()
                     ActionButton(title: "Unblock", variant: .ghost) { store.setPreference("blocked:\(address)", nil) }

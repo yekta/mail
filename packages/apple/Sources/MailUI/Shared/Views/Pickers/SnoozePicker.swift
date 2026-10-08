@@ -29,7 +29,7 @@ struct SnoozePicker: View {
                 if choices.isEmpty, !text.isEmpty {
                     Text("That isn't a time I know.")
                         .font(.ui(13))
-                        .foregroundStyle(Tokens.mutedForeground.color)
+                        .foregroundStyle(Tokens.mutedMoreForeground.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
                 }

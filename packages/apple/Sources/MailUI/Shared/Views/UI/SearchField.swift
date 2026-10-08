@@ -13,7 +13,7 @@ struct SearchField: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(symbol, size: 14).foregroundStyle(Tokens.mutedForeground.color)
+            Image(symbol, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(.ui(15))

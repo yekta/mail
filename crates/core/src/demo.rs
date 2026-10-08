@@ -11,8 +11,8 @@ use serde_json::json;
 use crate::store::{Batch, Store};
 
 const ACCOUNTS: [(&str, &str, Provider, &str); 2] = [
-    ("demo-home", "sam@example.com", Provider::Gmail, "chart-2"),
-    ("demo-work", "sam@acme.example", Provider::Jmap, "chart-5"),
+    ("demo-home", "sam@example.com", Provider::Gmail, "account-2"),
+    ("demo-work", "sam@acme.example", Provider::Jmap, "account-5"),
 ];
 
 /// What each account sends as: its own address, and for work an alias, with their signatures.
