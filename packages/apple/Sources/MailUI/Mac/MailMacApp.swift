@@ -106,9 +106,6 @@ struct MacRoot: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 .allowsHitTesting(false)
-            if case .ready(let version) = store.updater.state {
-                Banner(symbol: .circleCheck, text: "Wonnet \(version) is installed. Restart to use it.", action: "Restart") { store.updater.relaunch() }
-            }
             if let compose = store.compose {
                 // Writing is a page of its own, as a thread is, with its bar on top.
                 ComposeView(compose: compose).id(compose.id)
