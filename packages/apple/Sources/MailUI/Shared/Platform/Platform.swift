@@ -42,14 +42,31 @@ enum Platform {
         return base.appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.yekta.mail", isDirectory: true)
     }
 
+    /// Avenir Next, which both systems ship, at an exact size.
+    static func face(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> PlatformFont {
+        let name = switch weight {
+        case .ultraLight, .thin, .light: "AvenirNext-UltraLight"
+        case .medium: "AvenirNext-Medium"
+        case .semibold: "AvenirNext-DemiBold"
+        case .bold: "AvenirNext-Bold"
+        case .heavy, .black: "AvenirNext-Heavy"
+        default: "AvenirNext-Regular"
+        }
+        guard let font = PlatformFont(name: name, size: size) else {
+            return .systemFont(ofSize: size, weight: weight)
+        }
+        return font
+    }
+
+    /// Avenir Next at a Mac size, enlarged on iOS.
     static func font(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> PlatformFont {
-        PlatformFont.systemFont(ofSize: size * scale, weight: weight)
+        face(size * scale, weight)
     }
 }
 
 extension Font {
-    /// The system font at a Mac size, enlarged on iOS.
-    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size * Platform.scale, weight: weight)
+    /// Avenir Next at a Mac size, enlarged on iOS.
+    static func ui(_ size: CGFloat, _ weight: PlatformFont.Weight = .regular) -> Font {
+        Font(Platform.font(size, weight) as CTFont)
     }
 }

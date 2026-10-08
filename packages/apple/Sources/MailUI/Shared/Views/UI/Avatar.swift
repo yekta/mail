@@ -14,7 +14,7 @@ struct Avatar: View {
 
     var body: some View {
         Text(initials)
-            .font(.system(size: size * 0.4 * Platform.scale, weight: .semibold))
+            .font(.ui(size * 0.4, .semibold))
             .foregroundStyle(.white)
             .frame(width: size * Platform.scale, height: size * Platform.scale)
             .background(Circle().fill(tint.opacity(0.85)))
