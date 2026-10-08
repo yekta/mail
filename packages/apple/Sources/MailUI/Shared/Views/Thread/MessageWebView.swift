@@ -3,6 +3,7 @@ import WebKit
 
 /// The web views that draw message bodies, kept and reused: making one is the slow part. Their
 /// store is on disk, so a message's images come from the cache the next time the app opens.
+/// A page wider than the view (designed mail is often a fixed 600px) is scaled down to fit it.
 @MainActor
 final class WebViewPool {
     static let shared = WebViewPool()
@@ -15,13 +16,25 @@ final class WebViewPool {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         let script = """
             (function () {
+              function fit(body) {
+                body.style.width = '';
+                body.style.transform = '';
+                var wide = document.documentElement.scrollWidth, shown = document.documentElement.clientWidth;
+                if (wide <= shown + 1) { return; }
+                body.style.width = wide + 'px';
+                body.style.transformOrigin = '0 0';
+                body.style.transform = 'scale(' + shown / wide + ')';
+              }
               function report() {
-                var height = Math.ceil(document.body ? document.body.getBoundingClientRect().height : 0);
+                var body = document.body;
+                if (body) { fit(body); }
+                var height = Math.ceil(body ? body.getBoundingClientRect().height : 0);
                 window.webkit.messageHandlers.height.postMessage(height);
               }
               if (document.body) { new ResizeObserver(report).observe(document.body); }
               document.addEventListener('toggle', report, true);
               window.addEventListener('load', report);
+              window.addEventListener('resize', report);
               report();
             })();
             """
