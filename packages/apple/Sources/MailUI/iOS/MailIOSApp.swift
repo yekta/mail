@@ -31,32 +31,54 @@ enum Route: Hashable {
 
 struct IOSRoot: View {
     @Environment(MailStore.self) private var store
-    @State private var path: [Route] = [.mailbox("inbox")]
 
     var body: some View {
         @Bindable var store = store
         Group {
-            if !store.signedIn {
+            if !store.booted {
+                // The page's colour alone, until the core says where the app was left.
+                Tokens.card.color.ignoresSafeArea()
+            } else if !store.signedIn {
                 OnboardingView()
             } else {
-                NavigationStack(path: $path) {
-                    SidebarView(showSettings: { store.settingsOpen = true }, picked: { path.append(.mailbox($0)) })
-                        .navigationTitle("Mailboxes")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbarBackground(Tokens.sidebar.color, for: .navigationBar)
-                        .navigationDestination(for: Route.self) { route in
-                            switch route {
-                            case .mailbox: MailboxScreen(path: $path)
-                            case .thread(let id): ThreadScreenIOS(thread: id)
-                            }
-                        }
-                }
-                .tint(Tokens.primary.color)
+                IOSStack(start: restored)
             }
         }
         .overlay(alignment: .bottom) { ToastView() }
         .sheet(item: $store.compose) { compose in ComposeView(compose: compose).environment(store) }
         .mailSheets(store)
+    }
+
+    /// The screens the app was left on: the mailbox, and the thread open in it.
+    private var restored: [Route] {
+        guard let open = store.conversation?.id else { return [.mailbox(store.mailbox)] }
+        return [.mailbox(store.mailbox), .thread(open)]
+    }
+}
+
+/// The navigation stack, starting on the screens the app was left on.
+struct IOSStack: View {
+    @Environment(MailStore.self) private var store
+    @State private var path: [Route]
+
+    init(start: [Route]) {
+        _path = State(initialValue: start)
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            SidebarView(showSettings: { store.settingsOpen = true }, picked: { path.append(.mailbox($0)) })
+                .navigationTitle("Mailboxes")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(Tokens.sidebar.color, for: .navigationBar)
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .mailbox: MailboxScreen(path: $path)
+                    case .thread(let id): ThreadScreenIOS(thread: id)
+                    }
+                }
+        }
+        .tint(Tokens.primary.color)
         .onChange(of: store.requestedThread) { _, thread in
             guard let thread else { return }
             store.requestedThread = nil
@@ -98,6 +120,7 @@ struct MailboxScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(editing)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic))
+        .onAppear { query = store.searchQuery }
         .onChange(of: query) { _, text in store.search(text) }
         .onChange(of: store.searchQuery) { _, text in if text.isEmpty { query = "" } }
         .onChange(of: editing) { _, on in if !on { store.clearSelection() } }

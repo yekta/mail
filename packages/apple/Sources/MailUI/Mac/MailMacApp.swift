@@ -31,20 +31,22 @@ public struct MailMacApp: App {
 struct MacRoot: View {
     @Environment(MailStore.self) private var store
     @State private var focusSearch = 0
-    @State private var sidebarOpen = false
 
     var body: some View {
         @Bindable var store = store
         Group {
-            if !store.signedIn {
+            if !store.booted {
+                // The page's colour alone, until the core says where the app was left.
+                Tokens.card.color
+            } else if !store.signedIn {
                 OnboardingView().overlay(alignment: .bottom) { ToastView() }
             } else {
                 ZStack(alignment: .leading) {
                     content
-                    if sidebarOpen { sidebar }
+                    if store.sidebarOpen { sidebar }
                 }
                 .overlay(alignment: .bottom) { ToastView() }
-                .background(KeyHandler(store: store, focusSearch: { focusSearch += 1 }, sidebarOpen: $sidebarOpen))
+                .background(KeyHandler(store: store, focusSearch: { focusSearch += 1 }, sidebarOpen: $store.sidebarOpen))
             }
         }
         .frame(minWidth: 860, minHeight: 520)
@@ -76,7 +78,7 @@ struct MacRoot: View {
     }
 
     private func showSidebar(_ open: Bool) {
-        withAnimation(.easeOut(duration: 0.2)) { sidebarOpen = open }
+        withAnimation(.easeOut(duration: 0.2)) { store.sidebarOpen = open }
     }
 
     private var content: some View {
@@ -187,6 +189,7 @@ struct MacTopBar: View {
         }
         .padding(.horizontal, 20)
         .frame(height: 52)
+        .onAppear { query = store.searchQuery }
         .onChange(of: focusSearch) { searching = true }
         .onChange(of: store.searchQuery) { _, text in if text.isEmpty { query = "" } }
     }

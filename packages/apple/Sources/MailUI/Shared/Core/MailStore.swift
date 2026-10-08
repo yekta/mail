@@ -3,6 +3,12 @@ import Foundation
 import Observation
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
+
 /// A note at the bottom of the window, sometimes with something to do about it.
 struct Toast: Identifiable, Equatable {
     let id = UUID()
@@ -14,7 +20,7 @@ struct Toast: Identifiable, Equatable {
 }
 
 /// A message being written.
-struct Compose: Identifiable {
+struct Compose: Identifiable, Codable {
     let id = UUID()
     var draft: Draft
     var from: String
@@ -27,6 +33,16 @@ struct Compose: Identifiable {
     var remindAt: TimeChoice?
     /// Closing keeps it as a draft even unchanged: a message brought back from sending.
     var keep = false
+
+    enum CodingKeys: String, CodingKey {
+        case draft, from, showCc, draftId, thread, remindAt, keep
+    }
+
+    /// Whether anything was written in it.
+    var hasContent: Bool {
+        !draft.to.isEmpty || !draft.cc.isEmpty || !draft.bcc.isEmpty || !draft.subject.isEmpty || !draft.text.isEmpty
+            || !draft.attachments.isEmpty
+    }
 }
 
 @Observable @MainActor
@@ -37,6 +53,8 @@ public final class MailStore {
     #endif
 
     var started = false
+    /// The core answered where the app was left: until then the window shows nothing.
+    var booted = false
     var signedIn = false
     var connection = "offline"
     var server = ""
@@ -76,6 +94,10 @@ public final class MailStore {
     var requestedThread: String?
     /// Threads whose remote images were allowed.
     var imagesShown: Set<String> = []
+    /// The mailboxes over the page (Mac).
+    var sidebarOpen = false
+    /// How far the list is scrolled, as the lists report it; a list made anew goes back to it.
+    @ObservationIgnored var listOffset: CGFloat = 0
     var undoDelay: Int = UserDefaults.standard.object(forKey: "undoDelay") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(undoDelay, forKey: "undoDelay") }
     }
@@ -95,6 +117,9 @@ public final class MailStore {
     var focusedMessage: String?
     /// Each compose sheet's last save, so the next save and the send wait for it.
     @ObservationIgnored private var draftSaves: [UUID: Task<String?, Never>] = [:]
+    /// The compose sheet as it is being written, which `compose` doesn't follow.
+    @ObservationIgnored private var composeLive: Compose?
+    @ObservationIgnored private var uiSave: Task<Void, Never>?
 
     @ObservationIgnored private var toastAction: (() -> Void)?
     @ObservationIgnored private var searchRequest: UInt64 = 0
@@ -146,6 +171,7 @@ public final class MailStore {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let config: [String: Any] = ["data_dir": folder.path, "server_url": defaultServer, "demo": demo]
         guard bridge.start(config: config) else {
+            booted = true
             show("The mail store couldn't open.")
             return
         }
@@ -153,9 +179,113 @@ public final class MailStore {
         #if os(macOS)
         if !demo { updater.start() }
         #endif
-        Task {
-            await refresh()
-            await loadPreferences()
+        saveWhenLeaving()
+        Task { await boot() }
+    }
+
+    /// Shows the screen the app was left on, all of it at once.
+    private func boot() async {
+        defer {
+            booted = true
+            trackUi()
+        }
+        guard let boot = try? await bridge.call("boot", as: Boot.self) else { return }
+        let ui = boot.ui
+        signedIn = boot.status.signedIn
+        connection = boot.status.connection
+        server = boot.status.server ?? ""
+        unified = boot.mailboxes.unified
+        accounts = boot.mailboxes.accounts
+        preferences = Dictionary(boot.preferences.values.map { ($0.key, $0.value) }, uniquingKeysWith: { _, last in last })
+        preferencesLoaded = true
+        mailbox = ui.mailbox
+        filter = ui.filter
+        rows = boot.page.rows
+        total = boot.page.total
+        splits = boot.page.splits
+        selected = ui.selected
+        searchQuery = ui.search
+        searchRows = boot.search
+        conversation = boot.thread
+        unfoldedMessages = Set(ui.unfolded)
+        focusedMessage = ui.focused
+        if ui.images, let open = boot.thread?.id { imagesShown.insert(open) }
+        listOffset = CGFloat(ui.listOffset)
+        sidebarOpen = ui.sidebar
+        if var restored = ui.compose {
+            restored.keep = restored.keep || restored.hasContent
+            compose = restored
+        }
+        Notifier.shared.setBadge(unified.first(where: { $0.id == "inbox" })?.unread ?? 0)
+        if !accounts.isEmpty { Notifier.shared.askPermission() }
+        guard !searchQuery.isEmpty else { return }
+        search(searchQuery)
+    }
+
+    // MARK: Where the app is
+
+    /// Where the app is, as the core keeps it between starts.
+    private var uiState: UiState {
+        let compose = compose.map { sheet in composeLive?.id == sheet.id ? composeLive ?? sheet : sheet }
+        return UiState(
+            mailbox: mailbox, filter: filter, thread: conversation?.id, selected: selected, rows: rows.count,
+            listOffset: Double(listOffset), search: searchQuery, compose: compose, sidebar: sidebarOpen,
+            unfolded: Array(unfoldedMessages), focused: focusedMessage,
+            images: conversation.map { imagesShown.contains($0.id) } ?? false
+        )
+    }
+
+    /// Saves a little after anything in the state changes, however much changes at once.
+    private func trackUi() {
+        withObservationTracking {
+            _ = uiState
+        } onChange: {
+            Task { @MainActor in
+                self.scheduleUiSave()
+                self.trackUi()
+            }
+        }
+    }
+
+    private func scheduleUiSave() {
+        uiSave?.cancel()
+        uiSave = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.saveUi()
+        }
+    }
+
+    func saveUi() {
+        guard booted else { return }
+        uiSave?.cancel()
+        bridge.send("save_ui", ["ui": CoreBridge.object(uiState)])
+    }
+
+    /// The compose sheet's latest text, which it reports as it is typed.
+    func noteCompose(_ compose: Compose) {
+        composeLive = compose
+        scheduleUiSave()
+    }
+
+    /// The lists report where they are scrolled to.
+    func noteScroll(_ offset: CGFloat) {
+        guard offset != listOffset else { return }
+        listOffset = offset
+        scheduleUiSave()
+    }
+
+    /// Saves at once as the app goes to the background or quits.
+    private func saveWhenLeaving() {
+        #if os(macOS)
+        let leaving = [NSApplication.didResignActiveNotification, NSApplication.willTerminateNotification]
+        #else
+        let leaving = [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification]
+        #endif
+        for name in leaving {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.saveUi() }
+            }
         }
     }
 
@@ -274,6 +404,7 @@ public final class MailStore {
         selection = []
         selectionAnchor = nil
         selected = nil
+        listOffset = 0
         Task { await reloadThreads() }
     }
 
@@ -294,6 +425,7 @@ public final class MailStore {
         self.filter = filter
         selection = []
         rows = []
+        listOffset = 0
         Task { await reloadThreads() }
     }
 
@@ -317,6 +449,10 @@ public final class MailStore {
         if let draft = row(thread)?.draftId {
             openDraft(draft)
             return
+        }
+        if conversation?.id != thread {
+            unfoldedMessages = []
+            focusedMessage = nil
         }
         Task {
             do {

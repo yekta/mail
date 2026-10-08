@@ -83,10 +83,12 @@ struct ThreadScreen: View {
                     #endif
             }
             .onAppear {
-                let unread = conversation.messages.first(where: \.unread)?.id
-                store.focusedMessage = unread
-                guard let unread else { return }
-                DispatchQueue.main.async { proxy.scrollTo(unread, anchor: .top) }
+                // The message it was left on, else the first unread one.
+                let kept = store.focusedMessage.flatMap { id in conversation.messages.contains { $0.id == id } ? id : nil }
+                let target = kept ?? conversation.messages.first(where: \.unread)?.id
+                store.focusedMessage = target
+                guard let target else { return }
+                DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
             }
             .onChange(of: store.focusedMessage) { _, id in
                 guard let id else { return }

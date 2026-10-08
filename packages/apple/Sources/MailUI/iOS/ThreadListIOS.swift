@@ -24,6 +24,7 @@ struct ThreadListIOS: UIViewRepresentable {
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         context.coordinator.table = table
+        context.coordinator.pendingOffset = store.listOffset
         return table
     }
 
@@ -40,6 +41,8 @@ struct ThreadListIOS: UIViewRepresentable {
         private var rows: [ThreadRow] = []
         private var texts: [String: (ThreadRow, RowText)] = [:]
         private var prefetch: DispatchWorkItem?
+        /// Where to scroll to once the rows are there: where the list was last.
+        var pendingOffset: CGFloat?
 
         init(store: MailStore, open: @escaping (String) -> Void) {
             self.store = store
@@ -57,9 +60,19 @@ struct ThreadListIOS: UIViewRepresentable {
             } else {
                 table.reloadData()
             }
+            restoreOffset()
             if table.isEditing != editing { table.setEditing(editing, animated: true) }
             if editing { pick(checked) }
             if changed != [] { schedulePrefetch() }
+        }
+
+        private func restoreOffset() {
+            guard let offset = pendingOffset, !rows.isEmpty, let table else { return }
+            pendingOffset = nil
+            table.layoutIfNeeded()
+            let top = -table.adjustedContentInset.top
+            let bottom = max(table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom, top)
+            table.contentOffset = CGPoint(x: 0, y: min(max(offset, top), bottom))
         }
 
         /// The rows that changed when the list holds the same threads in the same order; nil
@@ -126,6 +139,7 @@ struct ThreadListIOS: UIViewRepresentable {
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            if pendingOffset == nil { store.noteScroll(scrollView.contentOffset.y) }
             schedulePrefetch()
         }
 

@@ -427,6 +427,7 @@ struct ComposeView: View {
     private func autosave() async {
         let snapshot = assembled
         guard snapshot.draft != kept else { return }
+        store.noteCompose(snapshot)
         edited = true
         try? await Task.sleep(for: .seconds(2))
         guard !Task.isCancelled, !closing else { return }
