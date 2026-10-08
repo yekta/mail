@@ -81,13 +81,15 @@ struct ThreadScreen: View {
                     // The page around the card: a click there closes the thread, as Newton's did.
                     .background { Tokens.background.color.onTapGesture(perform: store.close) }
                     #endif
+                    .background(ScrollKept(restore: store.threadOffset, report: store.noteThreadScroll))
             }
             .onAppear {
-                // The message it was left on, else the first unread one.
+                // The message it was left on, else the first unread one; where it was scrolled to
+                // wins over both.
                 let kept = store.focusedMessage.flatMap { id in conversation.messages.contains { $0.id == id } ? id : nil }
                 let target = kept ?? conversation.messages.first(where: \.unread)?.id
                 store.focusedMessage = target
-                guard let target else { return }
+                guard let target, store.threadOffset <= 0 else { return }
                 DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
             }
             .onChange(of: store.focusedMessage) { _, id in

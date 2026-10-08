@@ -55,6 +55,10 @@ pub struct UiState {
     pub rows: usize,
     /// How far the list was scrolled, in points.
     pub list_offset: f64,
+    /// How far the open thread was scrolled, in points.
+    pub thread_offset: f64,
+    /// The threads picked to act on together.
+    pub selection: Vec<String>,
     pub search: String,
     /// The compose sheet as the app keeps it, with what was typed.
     pub compose: Option<Value>,
@@ -75,6 +79,8 @@ impl Default for UiState {
             selected: None,
             rows: 0,
             list_offset: 0.0,
+            thread_offset: 0.0,
+            selection: Vec::new(),
             search: String::new(),
             compose: None,
             sidebar: false,

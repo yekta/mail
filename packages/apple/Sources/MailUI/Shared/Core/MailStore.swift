@@ -20,7 +20,14 @@ struct Toast: Identifiable, Equatable {
 }
 
 /// A message being written.
-struct Compose: Identifiable, Codable {
+struct Compose: Identifiable, Codable, Equatable {
+    /// What is typed in the address fields and not yet an address.
+    struct Typing: Codable, Hashable {
+        var to = ""
+        var cc = ""
+        var bcc = ""
+    }
+
     let id = UUID()
     var draft: Draft
     var from: String
@@ -33,9 +40,10 @@ struct Compose: Identifiable, Codable {
     var remindAt: TimeChoice?
     /// Closing keeps it as a draft even unchanged: a message brought back from sending.
     var keep = false
+    var typing: Typing?
 
     enum CodingKeys: String, CodingKey {
-        case draft, from, showCc, draftId, thread, remindAt, keep
+        case draft, from, showCc, draftId, thread, remindAt, keep, typing
     }
 
     /// Whether anything was written in it.
@@ -96,8 +104,10 @@ public final class MailStore {
     var imagesShown: Set<String> = []
     /// The mailboxes over the page (Mac).
     var sidebarOpen = false
-    /// How far the list is scrolled, as the lists report it; a list made anew goes back to it.
+    /// How far the list and the open thread are scrolled, as their views report it; a view made
+    /// anew goes back to it.
     @ObservationIgnored var listOffset: CGFloat = 0
+    @ObservationIgnored var threadOffset: CGFloat = 0
     var undoDelay: Int = UserDefaults.standard.object(forKey: "undoDelay") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(undoDelay, forKey: "undoDelay") }
     }
@@ -117,8 +127,6 @@ public final class MailStore {
     var focusedMessage: String?
     /// Each compose sheet's last save, so the next save and the send wait for it.
     @ObservationIgnored private var draftSaves: [UUID: Task<String?, Never>] = [:]
-    /// The compose sheet as it is being written, which `compose` doesn't follow.
-    @ObservationIgnored private var composeLive: Compose?
     @ObservationIgnored private var uiSave: Task<Void, Never>?
 
     @ObservationIgnored private var toastAction: (() -> Void)?
@@ -204,6 +212,7 @@ public final class MailStore {
         total = boot.page.total
         splits = boot.page.splits
         selected = ui.selected
+        selection = Set(ui.selection)
         searchQuery = ui.search
         searchRows = boot.search
         conversation = boot.thread
@@ -211,6 +220,7 @@ public final class MailStore {
         focusedMessage = ui.focused
         if ui.images, let open = boot.thread?.id { imagesShown.insert(open) }
         listOffset = CGFloat(ui.listOffset)
+        threadOffset = CGFloat(ui.threadOffset)
         sidebarOpen = ui.sidebar
         if var restored = ui.compose {
             restored.keep = restored.keep || restored.hasContent
@@ -226,16 +236,15 @@ public final class MailStore {
 
     /// Where the app is, as the core keeps it between starts.
     private var uiState: UiState {
-        let compose = compose.map { sheet in composeLive?.id == sheet.id ? composeLive ?? sheet : sheet }
-        return UiState(
+        UiState(
             mailbox: mailbox, filter: filter, thread: conversation?.id, selected: selected, rows: rows.count,
-            listOffset: Double(listOffset), search: searchQuery, compose: compose, sidebar: sidebarOpen,
-            unfolded: Array(unfoldedMessages), focused: focusedMessage,
-            images: conversation.map { imagesShown.contains($0.id) } ?? false
+            listOffset: Double(listOffset), threadOffset: Double(threadOffset), selection: Array(selection),
+            search: searchQuery, compose: compose, sidebar: sidebarOpen, unfolded: Array(unfoldedMessages),
+            focused: focusedMessage, images: conversation.map { imagesShown.contains($0.id) } ?? false
         )
     }
 
-    /// Saves a little after anything in the state changes, however much changes at once.
+    /// Saves a little after the state changes, however much changes in the meantime.
     private func trackUi() {
         withObservationTracking {
             _ = uiState
@@ -248,7 +257,7 @@ public final class MailStore {
     }
 
     private func scheduleUiSave() {
-        uiSave?.cancel()
+        guard uiSave == nil else { return }
         uiSave = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
@@ -259,19 +268,35 @@ public final class MailStore {
     func saveUi() {
         guard booted else { return }
         uiSave?.cancel()
+        uiSave = nil
         bridge.send("save_ui", ["ui": CoreBridge.object(uiState)])
     }
 
-    /// The compose sheet's latest text, which it reports as it is typed.
-    func noteCompose(_ compose: Compose) {
-        composeLive = compose
-        scheduleUiSave()
+    /// Saves and waits for it to be written, before the app quits.
+    func saveUiNow() async {
+        guard booted else { return }
+        uiSave?.cancel()
+        uiSave = nil
+        _ = try? await bridge.call("save_ui", ["ui": CoreBridge.object(uiState)], as: Empty.self)
     }
 
-    /// The lists report where they are scrolled to.
+    /// The compose view reports what it holds as it is written.
+    func noteCompose(_ live: Compose) {
+        guard compose?.id == live.id, compose != live else { return }
+        compose = live
+    }
+
+    /// The list reports where it is scrolled to.
     func noteScroll(_ offset: CGFloat) {
         guard offset != listOffset else { return }
         listOffset = offset
+        scheduleUiSave()
+    }
+
+    /// The open thread reports where it is scrolled to.
+    func noteThreadScroll(_ offset: CGFloat) {
+        guard offset != threadOffset else { return }
+        threadOffset = offset
         scheduleUiSave()
     }
 
@@ -453,6 +478,7 @@ public final class MailStore {
         if conversation?.id != thread {
             unfoldedMessages = []
             focusedMessage = nil
+            threadOffset = 0
         }
         Task {
             do {
