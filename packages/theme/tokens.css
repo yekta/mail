@@ -5,7 +5,7 @@
 }
 
 :root {
-  --background: #f1f2f3;
+  --background: #f8f9fa;
   --foreground: #434b52;
   --card: #ffffff;
   --card-foreground: #434b52;
@@ -51,7 +51,7 @@
 
 @media (prefers-color-scheme: dark) {
     :root {
-    --background: #121414;
+    --background: #161819;
     --foreground: #f1f1f1;
     --card: #1a1c1e;
     --card-foreground: #f1f1f1;
