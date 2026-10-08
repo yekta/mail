@@ -57,6 +57,9 @@ struct ComposeView: View {
     init(compose: Compose) {
         _compose = State(initialValue: compose)
         _kept = State(initialValue: compose.draft)
+        _to = State(initialValue: compose.typing?.to ?? "")
+        _cc = State(initialValue: compose.typing?.cc ?? "")
+        _bcc = State(initialValue: compose.typing?.bcc ?? "")
     }
 
     var body: some View {
@@ -74,8 +77,18 @@ struct ComposeView: View {
                     fields
                     message
                 }
+                #if os(macOS)
+                .frame(maxWidth: Theme.cardWidth)
+                .background(Tokens.card.color)
+                .padding(.top, 16)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity)
+                #endif
             }
             .scrollDismissesKeyboard(.interactively)
+            #if os(macOS)
+            .background(Tokens.background.color)
+            #endif
             rule
             toolbar
         }
@@ -121,7 +134,10 @@ struct ComposeView: View {
             }
             Button("Keep it", role: .cancel) {}
         }
-        .task(id: assembled.draft) { await autosave() }
+        .task(id: live) {
+            store.noteCompose(live)
+            await autosave()
+        }
         .task {
             if !store.preferencesLoaded { await store.loadPreferences() }
         }
@@ -134,17 +150,20 @@ struct ComposeView: View {
             guard !closing, timing == nil, !pickingSnippet, !importing else { return }
             store.closeCompose(assembled, keep: edited || compose.keep || compose.draftId != nil)
         }
-        #if os(macOS)
-        .frame(minWidth: 640, idealWidth: 720, minHeight: 520, idealHeight: 660)
-        #endif
     }
 
     // MARK: Parts
 
+    /// On the Mac the page's top bar, as a thread's; on iOS the sheet's header.
     private var header: some View {
         HStack(spacing: 10) {
+            #if os(macOS)
+            IconButton(symbol: .arrowLeft, help: "Back (Esc)", action: close)
+                .keyboardShortcut(.cancelAction)
+            #else
             ActionButton(title: "Cancel", variant: .ghost, action: close)
                 .keyboardShortcut(.cancelAction)
+            #endif
             Spacer()
             Text(title).font(.ui(14, .semibold)).foregroundStyle(Tokens.foreground.color)
             Spacer()
@@ -158,7 +177,11 @@ struct ComposeView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(assembled.draft.to.isEmpty && assembled.draft.cc.isEmpty && assembled.draft.bcc.isEmpty)
         }
+        #if os(macOS)
+        .padding(.horizontal, 20)
+        #else
         .padding(.horizontal, 14)
+        #endif
         .frame(height: 52)
     }
 
@@ -316,6 +339,13 @@ struct ComposeView: View {
     private var title: String {
         guard compose.draft.inReplyTo == nil else { return "Reply" }
         return compose.draft.forwardAttachmentsOf != nil || compose.draft.subject.hasPrefix("Fwd:") ? "Forward" : "New message"
+    }
+
+    /// The compose as it is, with what is typed in the address fields, for the store to keep.
+    private var live: Compose {
+        var current = compose
+        current.typing = Compose.Typing(to: to, cc: cc, bcc: bcc)
+        return current
     }
 
     /// The compose with what is typed in the address fields made addresses.

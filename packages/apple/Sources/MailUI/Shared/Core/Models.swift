@@ -355,6 +355,8 @@ struct UiState: Codable {
     var selected: String?
     var rows = 0
     var listOffset: Double = 0
+    var threadOffset: Double = 0
+    var selection: [String] = []
     var search = ""
     var compose: Compose?
     var sidebar = false
