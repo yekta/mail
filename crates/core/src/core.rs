@@ -577,6 +577,7 @@ impl Core {
     fn open_thread(&mut self, thread: &str, images: bool) -> Result<Value> {
         let messages = self.store.thread_messages(thread)?;
         let Some(last) = messages.last() else { bail!("This conversation is gone.") };
+        let images = images || self.store.preference("remote_images") != Some(json!(false));
         let me = self.store.me();
         let now = Local::now();
         let mut people: Vec<Address> = Vec::new();
@@ -1630,6 +1631,21 @@ mod tests {
         let view = demo.call(json!({ "type": "open_thread", "thread": thread })).await.unwrap();
         assert_eq!(view["muted"], false);
         assert!(demo.inbox().await.contains(&thread));
+    }
+
+    #[tokio::test]
+    async fn remote_images_are_shown_unless_the_preference_turns_them_off() {
+        let mut demo = Demo::start();
+        let kettle = demo.thread("Autumn blends").await;
+        let blocked = async |demo: &mut Demo, images: bool| {
+            let view = demo.call(json!({ "type": "open_thread", "thread": kettle, "images": images })).await.unwrap();
+            view["messages"][0]["blocked_images"] == true
+        };
+        assert!(!blocked(&mut demo, false).await);
+
+        demo.call(json!({ "type": "set_preference", "key": "remote_images", "value": false })).await.unwrap();
+        assert!(blocked(&mut demo, false).await);
+        assert!(!blocked(&mut demo, true).await);
     }
 
     #[tokio::test]

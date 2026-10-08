@@ -113,10 +113,6 @@ struct ThreadScreen: View {
                     Rectangle().fill(Tokens.border.color).frame(height: 1)
                 }
             }
-            if conversation.messages.contains(where: \.blockedImages) {
-                ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
-                    .padding(.top, 8)
-            }
             if let draft = conversation.draftId {
                 draftCard(draft)
             }
@@ -170,6 +166,12 @@ struct ThreadScreen: View {
                     if conversation.unsubscribe {
                         ActionButton(title: "Unsubscribe", symbol: .mailX, variant: .ghost) { store.act(.unsubscribe, on: [conversation.id]) }
                     }
+                }
+            }
+            if conversation.messages.contains(where: \.blockedImages) {
+                HStack(spacing: 8) {
+                    Text("Images from the sender were left out.").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                    ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
                 }
             }
         }

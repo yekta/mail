@@ -41,6 +41,7 @@ struct SettingsView: View {
                     }
                     SettingsSection(title: "Split Inbox") { SplitSettings() }
                     SettingsSection(title: "Blocked senders", detail: "Their new mail goes to the trash.") { BlockedSettings() }
+                    SettingsSection(title: "Images") { ImageSettings() }
                     SettingsSection(title: "Notifications") { NotificationSettings() }
                 }
                 SettingsSection(title: "Appearance") {

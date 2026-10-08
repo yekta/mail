@@ -19,6 +19,8 @@
 //! - `blocked:<address or @domain>`: `true`. The server trashes new mail from it.
 //! - `muted:<thread>`: `true`. The server archives new mail in it.
 //! - `notify:<account id>`: `false` stops notifications for that account.
+//! - `remote_images`: `false` leaves the images a message loads from the web out until the user
+//!   asks for them, so the sender doesn't learn the mail was opened. By default they are shown.
 
 use mail_protocol::{Address, Attachment, Draft, Identity};
 use serde::{Deserialize, Serialize};
@@ -124,7 +126,8 @@ pub enum Command {
     Prefetch {
         threads: Vec<String>,
     },
-    /// A `ThreadView`. Marks the thread read.
+    /// A `ThreadView`. Marks the thread read. `images` shows the remote images of this thread
+    /// even with `remote_images` off.
     OpenThread {
         thread: String,
         #[serde(default)]
@@ -418,6 +421,7 @@ pub struct MessageView {
     pub html: Option<String>,
     /// The server couldn't fetch the body; opening the thread again later asks again.
     pub failed: bool,
+    /// Remote images were left out; `OpenThread` with `images` shows them.
     pub blocked_images: bool,
     /// Open one with `OpenAttachment` and its place in this list.
     pub attachments: Vec<Attachment>,

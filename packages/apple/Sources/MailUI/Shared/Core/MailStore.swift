@@ -679,6 +679,7 @@ public final class MailStore {
         Task {
             do {
                 _ = try await bridge.call("set_preference", fields, as: Empty.self)
+                if key == "remote_images" { await reopen() }
             } catch {
                 show(error.localizedDescription)
                 await loadPreferences()
