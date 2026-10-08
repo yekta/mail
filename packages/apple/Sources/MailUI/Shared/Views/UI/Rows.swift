@@ -44,12 +44,16 @@ struct NavRow<Trailing: View>: View {
     var count = 0
     var selected = false
     var indent: CGFloat = 0
+    var verticalPadding: CGFloat = 0
     let action: () -> Void
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         Button(action: action) {
-            Face(title: title, symbol: symbol, dot: dot, count: count, selected: selected, indent: indent, trailing: trailing)
+            Face(
+                title: title, symbol: symbol, dot: dot, count: count, selected: selected, indent: indent,
+                verticalPadding: verticalPadding, trailing: trailing
+            )
         }
         .buttonStyle(.press)
     }
@@ -61,6 +65,7 @@ struct NavRow<Trailing: View>: View {
         let count: Int
         let selected: Bool
         let indent: CGFloat
+        let verticalPadding: CGFloat
         let trailing: Trailing
         @Environment(\.hovered) private var hovered
 
@@ -85,6 +90,7 @@ struct NavRow<Trailing: View>: View {
             .padding(.leading, 18 + indent)
             .padding(.trailing, Space.l)
             .frame(height: Theme.rowHeight * Platform.scale)
+            .padding(.vertical, verticalPadding * Platform.scale)
             .background(selected ? Tokens.accent.color : hovered ? Tokens.accent.color.opacity(0.6) : .clear)
             .contentShape(Rectangle())
         }

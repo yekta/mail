@@ -74,7 +74,7 @@ struct SidebarView: View {
                     .padding(.vertical, Space.s)
             }
             #endif
-            NavRow(title: "Settings", symbol: .settings, action: showSettings) {
+            NavRow(title: "Settings", symbol: .settings, verticalPadding: 2, action: showSettings) {
                 if store.connection == "offline" {
                     Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
                 }
