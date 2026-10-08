@@ -81,8 +81,9 @@ const ROW_COLUMNS: &str = "t.id, t.account_id, a.color, t.senders, t.subject, t.
      t.starred, t.attachments, t.snoozed";
 
 /// The unified mailboxes, in the sidebar's order.
-pub const MAILBOXES: [(&str, &str, &str); 8] = [
+pub const MAILBOXES: [(&str, &str, &str); 9] = [
     ("inbox", "Inbox", "inbox"),
+    (UNREAD, "Unread", "mail"),
     ("starred", "Starred", "star"),
     ("snoozed", "Snoozed", "clock"),
     ("sent", "Sent", "send"),
@@ -91,6 +92,9 @@ pub const MAILBOXES: [(&str, &str, &str); 8] = [
     ("spam", "Spam", "shield-alert"),
     ("trash", "Trash", "trash"),
 ];
+
+/// The inbox's unread threads, with the ones read while it is on screen (see `thread_page`).
+const UNREAD: &str = "unread";
 
 /// How many threads a search finds at most.
 const SEARCH_LIMIT: usize = 200;
@@ -217,6 +221,28 @@ fn resolve(mailbox: &str, split: bool) -> Option<(String, Option<String>)> {
         _ => label,
     };
     Some((label, account))
+}
+
+/// Unread is the inbox, narrowed to its unread threads and those of `kept`: the label to read,
+/// and `kept` as JSON when it is Unread.
+fn unread_of(label: String, kept: &[String]) -> (String, Option<String>) {
+    if label != UNREAD {
+        return (label, None);
+    }
+    (role::INBOX.to_string(), Some(serde_json::json!(kept).to_string()))
+}
+
+fn filter_sql(filter: Option<Filter>) -> &'static str {
+    match filter {
+        None => "",
+        Some(Filter::Unread) => "AND l.unread > 0",
+        Some(Filter::Starred) => "AND l.starred > 0",
+    }
+}
+
+/// Unread's condition, with its kept threads as the JSON parameter `?index`.
+fn unread_sql(index: usize) -> String {
+    format!("AND (l.unread > 0 OR l.thread IN (SELECT value FROM json_each(?{index})))")
 }
 
 fn message_from_row(row: &rusqlite::Row) -> rusqlite::Result<Message> {
@@ -706,7 +732,11 @@ impl Store {
                 unread.insert((label, account), count);
             }
         }
-        let total = |label: &str| unread.iter().filter(|((name, _), _)| name == label).map(|(_, count)| count).sum();
+        let counted = |label: &str| if label == UNREAD { role::INBOX.to_string() } else { label.to_string() };
+        let total = |label: &str| {
+            let label = counted(label);
+            unread.iter().filter(|((name, _), _)| *name == label).map(|(_, count)| count).sum()
+        };
         let unified = MAILBOXES
             .iter()
             .map(|(id, name, symbol)| Mailbox {
@@ -724,7 +754,7 @@ impl Store {
                     id: format!("{id}/{mailbox}"),
                     name: name.to_string(),
                     symbol: symbol.to_string(),
-                    unread: unread.get(&(mailbox.to_string(), id.clone())).copied().unwrap_or(0),
+                    unread: unread.get(&(counted(mailbox), id.clone())).copied().unwrap_or(0),
                 })
                 .collect();
             let mut statement = self
@@ -746,13 +776,14 @@ impl Store {
     }
 
     /// A page of a mailbox (see `api.rs` for the ids), with its total and, over a split inbox,
-    /// the splits.
+    /// the splits. Unread keeps the threads of `kept` that are still in the inbox, read or not.
     pub fn thread_page<Tz: TimeZone>(
         &self,
         mailbox: &str,
         offset: usize,
         limit: usize,
         filter: Option<Filter>,
+        kept: &[String],
         now: &DateTime<Tz>,
     ) -> Result<ThreadPage>
     where
@@ -762,6 +793,7 @@ impl Store {
         let Some((label, account)) = resolve(mailbox, splits.is_some()) else {
             return Ok(ThreadPage { rows: Vec::new(), total: 0, splits: Vec::new() });
         };
+        let (label, unread) = unread_of(label, kept);
         let drafts = match label == role::DRAFTS && filter.is_none() {
             true => self.draft_rows(account.as_deref(), now)?,
             false => Vec::new(),
@@ -770,15 +802,15 @@ impl Store {
             true => (offset, limit),
             false => (0, offset + limit),
         };
-        let mut rows = self.list(&label, account.as_deref(), from, count, filter, now)?;
-        let total = self.count(&label, account.as_deref(), filter)? + drafts.len();
+        let mut rows = self.list(&label, account.as_deref(), from, count, filter, unread.as_deref(), now)?;
+        let total = self.count(&label, account.as_deref(), filter, unread.as_deref())? + drafts.len();
         if !drafts.is_empty() {
             rows.extend(drafts);
             rows.sort_by_key(|row| std::cmp::Reverse(row.timestamp));
             rows = rows.into_iter().skip(offset).take(limit).collect();
         }
         let tabs = match &splits {
-            Some(splits) if label == role::INBOX || label.starts_with("inbox:") => {
+            Some(splits) if unread.is_none() && (label == role::INBOX || label.starts_with("inbox:")) => {
                 let mut tabs = vec![("important".to_string(), "Important".to_string())];
                 tabs.extend(splits.iter().map(|split| (split.id.clone(), split.name.clone())));
                 tabs.push(("other".into(), "Other".into()));
@@ -786,8 +818,8 @@ impl Store {
                 let mut list = Vec::new();
                 for (id, name) in tabs {
                     let label = format!("inbox:{id}");
-                    let total = self.count(&label, account.as_deref(), None)? as u32;
-                    let unread = self.count(&label, account.as_deref(), Some(Filter::Unread))? as u32;
+                    let total = self.count(&label, account.as_deref(), None, None)? as u32;
+                    let unread = self.count(&label, account.as_deref(), Some(Filter::Unread), None)? as u32;
                     list.push(SplitTab { mailbox: format!("{prefix}{label}"), name, unread, total });
                 }
                 list
@@ -797,6 +829,8 @@ impl Store {
         Ok(ThreadPage { rows, total, splits: tabs })
     }
 
+    /// `unread`: in Unread, the threads kept in it as JSON (see `unread_of`).
+    #[allow(clippy::too_many_arguments)]
     fn list<Tz: TimeZone>(
         &self,
         label: &str,
@@ -804,23 +838,21 @@ impl Store {
         offset: usize,
         limit: usize,
         filter: Option<Filter>,
+        unread: Option<&str>,
         now: &DateTime<Tz>,
     ) -> Result<Vec<ThreadRow>>
     where
         Tz::Offset: std::fmt::Display,
     {
         let by_account = if account.is_some() { "AND l.account_id = ?2" } else { "AND ?2 IS NULL" };
-        let by_filter = match filter {
-            None => "",
-            Some(Filter::Unread) => "AND l.unread > 0",
-            Some(Filter::Starred) => "AND l.starred > 0",
-        };
+        let by_filter = filter_sql(filter);
+        let by_unread = if unread.is_some() { unread_sql(5) } else { "AND ?5 IS NULL".into() };
         let sql = format!(
             "SELECT {ROW_COLUMNS} FROM thread_labels l JOIN threads t ON t.id = l.thread JOIN accounts a ON a.id = t.account_id
-             WHERE l.label = ?1 {by_account} {by_filter} ORDER BY l.last_date DESC LIMIT ?3 OFFSET ?4"
+             WHERE l.label = ?1 {by_account} {by_filter} {by_unread} ORDER BY l.last_date DESC LIMIT ?3 OFFSET ?4"
         );
         let mut statement = self.db.prepare_cached(&sql)?;
-        let rows = statement.query_map(params![label, account, limit as i64, offset as i64], |row| {
+        let rows = statement.query_map(params![label, account, limit as i64, offset as i64, unread], |row| {
             let mut found = row_from(row, now)?;
             found.timestamp = row.get(6)?;
             Ok(found)
@@ -828,8 +860,20 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// How many threads a mailbox has (unread or starred ones with a filter), from `counts`.
-    fn count(&self, label: &str, account: Option<&str>, filter: Option<Filter>) -> Result<usize> {
+    /// How many threads a mailbox has (unread or starred ones with a filter), from `counts`;
+    /// Unread's are counted from its threads.
+    fn count(&self, label: &str, account: Option<&str>, filter: Option<Filter>, unread: Option<&str>) -> Result<usize> {
+        if let Some(kept) = unread {
+            let by_account = if account.is_some() { "AND l.account_id = ?2" } else { "AND ?2 IS NULL" };
+            let sql = format!(
+                "SELECT COUNT(*) FROM thread_labels l WHERE l.label = ?1 {by_account} {} {}",
+                filter_sql(filter),
+                unread_sql(3)
+            );
+            let count: i64 =
+                self.db.prepare_cached(&sql)?.query_row(params![label, account, kept], |row| row.get(0))?;
+            return Ok(count.max(0) as usize);
+        }
         let column = match filter {
             None => "total",
             Some(Filter::Unread) => "unread",
@@ -964,23 +1008,28 @@ impl Store {
     }
 
     /// The ids of the inbox messages in the threads a mailbox shows (only its unread or starred
-    /// ones with a filter), older than `before` when given, newest first.
-    pub fn inbox_messages(&self, mailbox: &str, before: Option<i64>, filter: Option<Filter>) -> Result<Vec<String>> {
+    /// ones with a filter, and Unread's `kept`), older than `before` when given, newest first.
+    pub fn inbox_messages(
+        &self,
+        mailbox: &str,
+        before: Option<i64>,
+        filter: Option<Filter>,
+        kept: &[String],
+    ) -> Result<Vec<String>> {
         let Some((label, account)) = resolve(mailbox, splits_in(&self.db)?.is_some()) else { return Ok(Vec::new()) };
+        let (label, unread) = unread_of(label, kept);
         let by_account = if account.is_some() { "AND l.account_id = ?2" } else { "AND ?2 IS NULL" };
-        let by_filter = match filter {
-            None => "",
-            Some(Filter::Unread) => "AND l.unread > 0",
-            Some(Filter::Starred) => "AND l.starred > 0",
-        };
+        let by_filter = filter_sql(filter);
+        let by_unread = if unread.is_some() { unread_sql(4) } else { "AND ?4 IS NULL".into() };
         let sql = format!(
             "SELECT m.id FROM thread_labels l JOIN messages m ON m.thread = l.thread
-             WHERE l.label = ?1 {by_account} {by_filter} AND l.last_date < ?3
+             WHERE l.label = ?1 {by_account} {by_filter} {by_unread} AND l.last_date < ?3
                  AND EXISTS (SELECT 1 FROM json_each(m.labels) WHERE value = 'inbox')
              ORDER BY l.last_date DESC"
         );
         let mut statement = self.db.prepare_cached(&sql)?;
-        let rows = statement.query_map(params![label, account, before.unwrap_or(i64::MAX)], |row| row.get(0))?;
+        let rows =
+            statement.query_map(params![label, account, before.unwrap_or(i64::MAX), unread], |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 

@@ -164,10 +164,41 @@ public final class MailStore {
     /// Every mailbox there is, unified first.
     var allMailboxes: [Mailbox] { unified + accounts.flatMap(\.mailboxes) }
 
-    /// The mailboxes shown as tabs over the list, in the user's order; one that is gone is skipped.
-    var tabs: [Mailbox] {
+    /// The account whose mailbox is on screen; none in the mailboxes of every account together.
+    var listAccount: String? {
+        let parts = mailbox.split(separator: "/")
+        return parts.count > 1 ? String(parts[0]) : nil
+    }
+
+    /// Whether the list is Unread, where the threads on screen stay when they are read.
+    var inUnread: Bool { baseMailbox.split(separator: "/").last == "unread" }
+
+    /// The tabs as saved, in the user's order; one that is gone is skipped.
+    var savedTabs: [Mailbox] {
         let all = allMailboxes
         return TabPreference.ids(in: preferences).compactMap { id in all.first(where: { $0.id == id }) }
+    }
+
+    /// The tabs over the list, for the account on screen: there `inbox` is its inbox. The same
+    /// mailbox saved twice shows once.
+    var tabs: [Mailbox] {
+        let all = allMailboxes
+        var shown = Set<String>()
+        return TabPreference.ids(in: preferences).compactMap { id in
+            let scoped = scopedTab(id)
+            guard shown.insert(scoped).inserted else { return nil }
+            return all.first(where: { $0.id == scoped })
+        }
+    }
+
+    private func scopedTab(_ id: String) -> String {
+        guard !id.contains("/"), let listAccount else { return id }
+        return "\(listAccount)/\(id)"
+    }
+
+    /// The saved id a tab over the list comes from.
+    func savedTab(_ id: String) -> String {
+        TabPreference.ids(in: preferences).first(where: { scopedTab($0) == id }) ?? id
     }
 
     func setTabs(_ ids: [String]) {
@@ -183,10 +214,13 @@ public final class MailStore {
         setTabs(ids)
     }
 
-    /// A mailbox's name, with its account's address after it when it is one account's.
-    func tabName(_ mailbox: Mailbox) -> String {
+    /// A mailbox's name, with its account's address after it when it is one account's other than
+    /// `shownIn`, the account on screen.
+    func tabName(_ mailbox: Mailbox, shownIn: String? = nil) -> String {
         let parts = mailbox.id.split(separator: "/").map(String.init)
-        guard parts.count > 1, accounts.count > 1, let account = accounts.first(where: { $0.id == parts[0] }) else { return mailbox.name }
+        guard parts.count > 1, accounts.count > 1, parts[0] != shownIn,
+            let account = accounts.first(where: { $0.id == parts[0] })
+        else { return mailbox.name }
         return "\(mailbox.name) · \(account.address)"
     }
 
@@ -413,7 +447,14 @@ public final class MailStore {
     private func page(offset: Int, limit: Int) async -> ThreadPage? {
         var fields: [String: Any] = ["mailbox": mailbox, "offset": offset, "limit": limit]
         if let filter { fields["filter"] = filter.rawValue }
+        if let kept = keptRows { fields["keep"] = kept }
         return try? await bridge.call("threads", fields, as: ThreadPage.self)
+    }
+
+    /// In Unread, the threads on screen, which stay there while they are in the inbox.
+    var keptRows: [String]? {
+        guard inUnread, listReady else { return nil }
+        return rows.map(\.id)
     }
 
     /// Reads the list again. What didn't change isn't set, so the views it would redraw don't.
@@ -476,8 +517,7 @@ public final class MailStore {
     /// One of the mailboxes every account has (`inbox`, `sent`, ...), in the account on screen
     /// when one is.
     func go(to kind: String) {
-        let parts = mailbox.split(separator: "/")
-        select(mailbox: parts.count > 1 ? "\(parts[0])/\(kind)" : kind)
+        select(mailbox: listAccount.map { "\($0)/\(kind)" } ?? kind)
     }
 
     /// Shows only unread or starred threads, or everything again.

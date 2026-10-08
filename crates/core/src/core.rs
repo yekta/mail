@@ -414,12 +414,16 @@ impl Core {
             }
             Command::SetAccountColor { account, color } => self.set_account_color(account, color),
             Command::Mailboxes => self.mailboxes(),
-            Command::Threads { mailbox, offset, limit, filter } => self.threads(&mailbox, offset, limit, filter),
+            Command::Threads { mailbox, offset, limit, filter, keep } => {
+                self.threads(&mailbox, offset, limit, filter, &keep)
+            }
             Command::Prefetch { threads } => self.prefetch(&threads),
             Command::OpenThread { thread, images } => self.open_thread(&thread, images),
             Command::Act { action, threads, until, label } => to_value(self.act(action, &threads, until, label)),
             Command::Undo => self.take_back(),
-            Command::ArchiveAll { mailbox, before, filter } => to_value(self.archive_all(&mailbox, before, filter)),
+            Command::ArchiveAll { mailbox, before, filter, keep } => {
+                to_value(self.archive_all(&mailbox, before, filter, &keep))
+            }
             Command::CreateLabel { account, name } => self.create_label(account, &name),
             Command::ParseTime { text } => Ok(json!({ "choices": times::parse(&text, &Local::now()) })),
             Command::Contacts { query, limit } => {
@@ -466,7 +470,7 @@ impl Core {
         let status = self.status()?;
         let mailboxes = self.mailboxes()?;
         let limit = ui.rows.clamp(100, 1000);
-        let page = self.store.thread_page(&ui.mailbox, 0, limit, ui.filter, &Local::now())?;
+        let page = self.store.thread_page(&ui.mailbox, 0, limit, ui.filter, &[], &Local::now())?;
         let thread = ui.thread.as_deref().and_then(|thread| self.open_thread(thread, ui.images).ok());
         let search = match ui.search.trim() {
             "" => None,
@@ -593,8 +597,15 @@ impl Core {
         Ok(json!({ "unified": unified, "accounts": accounts }))
     }
 
-    fn threads(&self, mailbox: &str, offset: usize, limit: usize, filter: Option<Filter>) -> Result<Value> {
-        let page = self.store.thread_page(mailbox, offset, limit, filter, &Local::now())?;
+    fn threads(
+        &self,
+        mailbox: &str,
+        offset: usize,
+        limit: usize,
+        filter: Option<Filter>,
+        keep: &[String],
+    ) -> Result<Value> {
+        let page = self.store.thread_page(mailbox, offset, limit, filter, keep, &Local::now())?;
         Ok(serde_json::to_value(page)?)
     }
 
@@ -1066,8 +1077,14 @@ impl Core {
         Ok(json!({ "message": "Undone." }))
     }
 
-    fn archive_all(&mut self, mailbox: &str, before: Option<i64>, filter: Option<Filter>) -> Result<ActReply> {
-        let ids = self.store.inbox_messages(mailbox, before, filter)?;
+    fn archive_all(
+        &mut self,
+        mailbox: &str,
+        before: Option<i64>,
+        filter: Option<Filter>,
+        keep: &[String],
+    ) -> Result<ActReply> {
+        let ids = self.store.inbox_messages(mailbox, before, filter, keep)?;
         if ids.is_empty() {
             return Ok(ActReply::default());
         }
