@@ -659,7 +659,7 @@ impl Core {
                 initials: rows::initials(&message.from),
                 to: if to.is_empty() { String::new() } else { format!("to {}", to.join(", ")) },
                 date: dates::long(message.date, &now),
-                snippet: message.snippet.clone(),
+                snippet: rows::snippet(&message.snippet),
                 unread: message.unread,
                 folded: index + 1 < messages.len() && !message.unread,
                 blocked_images: page.as_ref().is_some_and(|page| page.blocked_images),

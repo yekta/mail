@@ -1284,7 +1284,7 @@ where
         color: row.get(2)?,
         senders: row.get(3)?,
         subject: row.get(4)?,
-        snippet: row.get(5)?,
+        snippet: rows::snippet(&row.get::<_, String>(5)?),
         date: dates::short(timestamp, now),
         timestamp,
         unread: row.get::<_, i64>(7)? > 0,
