@@ -41,7 +41,7 @@ added to the component, not to the view.
 
 | Component | What it is |
 | --- | --- |
-| `ActionButton` | Words, an optional icon, four variants (`primary`, `outline`, `ghost`, `destructive`), three sizes, `pending`, `wide` |
+| `ActionButton`, `ActionMenu` | Words, an optional icon, four variants (`primary`, `outline`, `ghost`, `destructive`), three sizes, `pending`, `wide`; the menu opens one |
 | `IconButton`, `IconMenu`, `IconCircle` | An icon in a thin circle; `active`, `quiet`, `circled`, `pending` |
 | `PlainButton` | Only its content, still with hover, press and disabled states, and the minimum height; `tint` colours its hover |
 | `StarButton` | A thread's star, in the star colour when starred or hovered |
@@ -57,6 +57,7 @@ added to the component, not to the view.
 | `ChoiceRow`, `ChoiceList` | One choice under a field, and the list that scrolls to the highlighted one |
 | `PopupCard` | A card over the page for suggestions |
 | `TabStrip` | Tabs on a line with counts |
+| `PillTabs` | Pills on a line with an icon and a count, the chosen one filled; dragged to reorder, with a menu on each |
 | `SectionHeading`, `FormSection` | A section's name in capitals, with its controls |
 | `Card`, `FormButtons` | A rounded card, and Save and Cancel under a form |
 | `Notice` | A line about something, muted or in error tone, with an optional action |

@@ -66,6 +66,15 @@ struct GalleryView: View {
                             }
                         }
                         HStack(spacing: 0) {
+                            ActionMenu(title: "Menu", symbol: .plus) {
+                                Button("One") {}
+                                Button("Two") {}
+                            }
+                            ActionMenu(title: "Ghost menu", variant: .ghost) {
+                                Button("One") {}
+                            }
+                        }
+                        HStack(spacing: 0) {
                             StarButton(starred: true) {}
                             StarButton(starred: false) {}
                             PlainButton(action: {}) { Text("Undo").textStyle(.labelStrong, color: Tokens.primary.color) }
@@ -123,6 +132,13 @@ struct GalleryView: View {
                         )
                         .padding(.horizontal, Space.l)
                         .rule(.bottom)
+                        PillTabs(
+                            tabs: [Tab(id: "important", name: "Inbox", count: 12), Tab(id: "other", name: "Starred", count: 0)],
+                            selected: tab, symbol: { $0.id == "important" ? .inbox : .star }, title: \.name, count: \.count,
+                            pick: { tab = $0.id }, reorder: { _ in }
+                        ) { _ in
+                            Button("Remove from Tabs") {}
+                        }
                     }
                     FormSection(title: "Notes") {
                         Notice(text: "A line about something.")

@@ -105,7 +105,7 @@ struct ActionButton: View {
         .buttonStyle(.press)
     }
 
-    private struct Face: View {
+    fileprivate struct Face: View {
         let title: String
         let symbol: Symbol?
         let variant: Variant
@@ -150,6 +150,27 @@ struct ActionButton: View {
             case .destructive: Tokens.destructive.color.opacity(0.6)
             }
         }
+    }
+}
+
+/// A button with words, like `ActionButton`, that opens a menu.
+struct ActionMenu<Content: View>: View {
+    let title: String
+    var symbol: Symbol?
+    var variant: ActionButton.Variant = .outline
+    var size: ControlSize = .regular
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            ActionButton.Face(title: title, symbol: symbol, variant: variant, size: size, pending: false, wide: false)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.press)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 }
 

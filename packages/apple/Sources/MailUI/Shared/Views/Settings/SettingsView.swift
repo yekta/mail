@@ -30,6 +30,7 @@ struct SettingsView: View {
                         FormSection(title: "Snippets", detail: "Type ; and a name while writing to put one in, or press ⌘;. {first_name} becomes the first recipient's first name.") {
                             SnippetSettings()
                         }
+                        FormSection(title: "Tabs", detail: "The mailboxes kept over the list. Drag a tab to move it.") { TabSettings() }
                         FormSection(title: "Split Inbox") { SplitSettings() }
                         FormSection(title: "Blocked senders", detail: "Their new mail goes to the trash.") { BlockedSettings() }
                         FormSection(title: "Images") { ImageSettings() }
