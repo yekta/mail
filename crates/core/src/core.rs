@@ -1671,6 +1671,7 @@ mod tests {
             "mailbox": "demo-home/inbox", "thread": thread, "selected": thread, "rows": 3, "list_offset": 120.5,
             "thread_offset": 300.0, "selection": [thread], "search": "dinner",
             "compose": { "draft": { "text": "hello" } }, "sidebar": true, "unfolded": ["m1"],
+            "heights": { "m1": 412.5 }, "body_width": 640.0,
         });
         demo.call(json!({ "type": "save_ui", "ui": ui })).await.unwrap();
         let boot = demo.call(json!({ "type": "boot" })).await.unwrap();
@@ -1680,6 +1681,8 @@ mod tests {
         assert_eq!(boot["ui"]["selection"], json!([thread]));
         assert_eq!(boot["ui"]["compose"]["draft"]["text"], "hello");
         assert_eq!(boot["ui"]["unfolded"], json!(["m1"]));
+        assert_eq!(boot["ui"]["heights"]["m1"], 412.5);
+        assert_eq!(boot["ui"]["body_width"], 640.0);
         assert_eq!(boot["ui"]["filter"], Value::Null, "what wasn't saved has its default");
         assert!(boot["page"]["rows"].as_array().unwrap().iter().all(|row| row["account_id"] == "demo-home"));
         assert_eq!(boot["thread"]["id"], thread.as_str());

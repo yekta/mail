@@ -24,6 +24,8 @@
 //! - `dark_mail`: `false` keeps designed mail as its sender made it in the dark scheme. By
 //!   default its colours are turned to dark, and each page can be asked for the original.
 
+use std::collections::BTreeMap;
+
 use mail_protocol::{Address, Attachment, Draft, Identity};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -70,6 +72,10 @@ pub struct UiState {
     pub focused: Option<String>,
     /// Remote images were allowed in the open thread.
     pub images: bool,
+    /// How tall each shown body of the open thread was, by message id, at `body_width` points
+    /// wide: the cards open at their size before the pages are laid out again.
+    pub heights: BTreeMap<String, f64>,
+    pub body_width: f64,
 }
 
 impl Default for UiState {
@@ -89,6 +95,8 @@ impl Default for UiState {
             unfolded: Vec::new(),
             focused: None,
             images: false,
+            heights: BTreeMap::new(),
+            body_width: 0.0,
         }
     }
 }

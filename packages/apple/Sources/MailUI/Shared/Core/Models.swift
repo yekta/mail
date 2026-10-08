@@ -365,6 +365,8 @@ struct UiState: Codable {
     var unfolded: [String] = []
     var focused: String?
     var images = false
+    var heights: [String: Double] = [:]
+    var bodyWidth: Double = 0
 }
 
 /// The answer to `boot`: everything the first frame shows, as the app was left.

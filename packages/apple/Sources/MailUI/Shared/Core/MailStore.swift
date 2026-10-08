@@ -113,6 +113,10 @@ public final class MailStore {
     /// anew goes back to it.
     @ObservationIgnored var listOffset: CGFloat = 0
     @ObservationIgnored var threadOffset: CGFloat = 0
+    /// How tall the open thread's bodies were, by message id, when they were `bodyWidth` wide,
+    /// so a thread opened again at the same width is laid out before its pages are.
+    @ObservationIgnored var bodyHeights: [String: CGFloat] = [:]
+    @ObservationIgnored var bodyWidth: CGFloat = 0
     var undoDelay: Int = UserDefaults.standard.object(forKey: "undoDelay") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(undoDelay, forKey: "undoDelay") }
     }
@@ -288,8 +292,15 @@ public final class MailStore {
         selection = Set(ui.selection)
         searchQuery = ui.search
         searchRows = boot.search
-        conversation = boot.thread
         unfoldedMessages = Set(ui.unfolded)
+        if let thread = boot.thread {
+            // Their pages parse while the thread's view is built.
+            let shown = thread.messages.filter { !$0.folded || unfoldedMessages.contains($0.id) }
+            WebViewPool.shared.preload(shown.compactMap(\.html))
+        }
+        bodyHeights = ui.heights.mapValues { CGFloat($0) }
+        bodyWidth = CGFloat(ui.bodyWidth)
+        conversation = boot.thread
         focusedMessage = ui.focused
         if ui.images, let open = boot.thread?.id { imagesShown.insert(open) }
         listOffset = CGFloat(ui.listOffset)
@@ -313,7 +324,8 @@ public final class MailStore {
             mailbox: mailbox, filter: filter, thread: conversation?.id, selected: selected, rows: rows.count,
             listOffset: Double(listOffset), threadOffset: Double(threadOffset), selection: Array(selection),
             search: searchQuery, compose: compose, sidebar: sidebarOpen, unfolded: Array(unfoldedMessages),
-            focused: focusedMessage, images: conversation.map { imagesShown.contains($0.id) } ?? false
+            focused: focusedMessage, images: conversation.map { imagesShown.contains($0.id) } ?? false,
+            heights: bodyHeights.mapValues { Double($0) }, bodyWidth: Double(bodyWidth)
         )
     }
 
@@ -371,6 +383,25 @@ public final class MailStore {
         guard offset != threadOffset else { return }
         threadOffset = offset
         scheduleUiSave()
+    }
+
+    /// A body of the open thread reports how tall its page is at this width. A new width
+    /// starts the heights over.
+    func noteBodyHeight(_ message: String, width: CGFloat, height: CGFloat) {
+        guard width > 0 else { return }
+        if abs(width - bodyWidth) > 0.5 {
+            bodyHeights = [:]
+            bodyWidth = width
+        }
+        guard bodyHeights[message] != height else { return }
+        bodyHeights[message] = height
+        scheduleUiSave()
+    }
+
+    /// The saved height of a body, when it was measured at this width.
+    func bodyHeight(_ message: String, width: CGFloat) -> CGFloat? {
+        guard abs(width - bodyWidth) <= 0.5 else { return nil }
+        return bodyHeights[message]
     }
 
     /// Saves at once as the app goes to the background or quits.
@@ -560,6 +591,7 @@ public final class MailStore {
             originalMessages = []
             focusedMessage = nil
             threadOffset = 0
+            bodyHeights = [:]
         }
         Task {
             do {
