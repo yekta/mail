@@ -101,12 +101,7 @@ struct MailboxScreen: View {
         VStack(spacing: 0) {
             ListHeader()
             if store.visibleRows.isEmpty {
-                VStack(spacing: 12) {
-                    Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedMostForeground.color)
-                    Text(emptyMessage).font(.ui(15)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Tokens.card.color)
+                EmptyList().background(Tokens.card.color)
             } else {
                 ThreadListIOS(store: store, rows: store.visibleRows, editing: editing, checked: store.selection) { thread in
                     let draft = store.row(thread)?.draftId != nil
@@ -132,13 +127,6 @@ struct MailboxScreen: View {
             }
         }
         .refreshable { await store.refresh() }
-    }
-
-    private var emptyMessage: String {
-        if store.searchRows != nil { return "Nothing matches." }
-        if store.filter == .unread { return "Nothing unread." }
-        if store.filter == .starred { return "Nothing starred." }
-        return store.baseMailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {

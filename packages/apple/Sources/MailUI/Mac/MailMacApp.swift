@@ -91,7 +91,7 @@ struct MacRoot: View {
         }
         .frame(width: Theme.sidebarWidth)
         .background(Tokens.card.color)
-        .overlay(alignment: .trailing) { Rectangle().fill(Tokens.border.color).frame(width: 1) }
+        .rule(.trailing)
         .transition(.move(edge: .leading))
     }
 
@@ -102,8 +102,7 @@ struct MacRoot: View {
     private var content: some View {
         VStack(spacing: 0) {
             Text(store.conversation == nil && store.compose == nil ? store.mailboxName : "")
-                .font(.ui(13, .medium))
-                .foregroundStyle(Tokens.mutedForeground.color)
+                .textStyle(.labelStrong, color: Tokens.mutedForeground.color)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 .allowsHitTesting(false)
@@ -115,7 +114,7 @@ struct MacRoot: View {
                 ComposeView(compose: compose).id(compose.id)
             } else {
                 MacTopBar(focusSearch: focusSearch, showSidebar: { showSidebar(true) })
-                Rectangle().fill(Tokens.border.color).frame(height: 1)
+                Rule()
                 page
             }
         }
@@ -137,8 +136,8 @@ struct MacRoot: View {
                     }
                     .frame(maxWidth: Theme.cardWidth)
                     .background(Tokens.card.color)
-                    .padding(.top, 16)
-                    .padding(.horizontal, 24)
+                    .padding(.top, Space.l)
+                    .padding(.horizontal, Space.xl + 4)
                 } else {
                     // The list scrolls the whole page; only its header stays put above it.
                     let header = ListHeader.shows(store)
@@ -146,12 +145,12 @@ struct MacRoot: View {
                         if header {
                             ListHeader()
                                 .frame(maxWidth: Theme.cardWidth)
-                                .padding(.top, 16)
-                                .padding(.horizontal, 24)
+                                .padding(.top, Space.l)
+                                .padding(.horizontal, Space.xl + 4)
                         }
                         ThreadListMac(
                             store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
-                            topInset: header ? 0 : 16, shown: store.conversation == nil
+                            topInset: header ? 0 : Space.l, shown: store.conversation == nil
                         )
                     }
                 }
@@ -170,11 +169,10 @@ struct MacTopBar: View {
     @Environment(MailStore.self) private var store
     let focusSearch: Int
     let showSidebar: () -> Void
-    @FocusState private var searching: Bool
     @State private var query = ""
 
     var body: some View {
-        HStack(spacing: 12) {
+        HeaderBar {
             IconButton(symbol: .menu, help: "Mailboxes", circled: false, action: showSidebar)
             if let open = store.conversation {
                 IconButton(symbol: .arrowLeft, help: "Back (Esc)") { store.close() }
@@ -184,62 +182,19 @@ struct MacTopBar: View {
             } else if !store.selection.isEmpty {
                 SelectionBar()
             } else {
-                HStack(spacing: 8) {
-                    Image(.search, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color)
-                    TextField("Search", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.ui(13))
-                        .focused($searching)
-                        .onSubmit { store.search(query) }
-                        .onChange(of: query) { _, text in store.search(text) }
-                        .onExitCommand {
-                            query = ""
-                            store.endSearch()
-                            searching = false
-                        }
-                    if !query.isEmpty {
-                        Button {
-                            query = ""
-                            store.endSearch()
-                        } label: {
-                            Image(.x, size: 12).foregroundStyle(Tokens.mutedMoreForeground.color)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 12)
+                SearchField(
+                    placeholder: "Search", text: $query, style: .bar, autofocus: false, focusTrigger: focusSearch,
+                    submit: { store.search(query) }, escape: store.endSearch, clear: store.endSearch
+                )
                 .frame(maxWidth: 420)
-                .frame(height: 32)
-                .overlay(Capsule().strokeBorder(Tokens.input.color, lineWidth: 1))
                 Spacer()
             }
+        } trailing: {
             ActionButton(title: "Compose", symbol: .squarePen, variant: .outline, action: store.newMessage)
         }
-        .padding(.horizontal, 20)
-        .frame(height: 52)
         .onAppear { query = store.searchQuery }
-        .onChange(of: focusSearch) { searching = true }
+        .onChange(of: query) { _, text in store.search(text) }
         .onChange(of: store.searchQuery) { _, text in if text.isEmpty { query = "" } }
-    }
-}
-
-/// An empty mailbox: a calm line instead of a list.
-struct EmptyList: View {
-    @Environment(MailStore.self) private var store
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedMostForeground.color)
-            Text(message).font(.ui(15)).foregroundStyle(Tokens.mutedMoreForeground.color)
-        }
-    }
-
-    private var message: String {
-        if store.searchRows != nil { return "Nothing matches." }
-        if store.filter == .unread { return "Nothing unread." }
-        if store.filter == .starred { return "Nothing starred." }
-        if store.connection == "connecting" && store.accounts.isEmpty { return "Syncing…" }
-        return store.baseMailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."
     }
 }
 #endif

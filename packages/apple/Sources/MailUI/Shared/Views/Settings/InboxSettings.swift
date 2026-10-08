@@ -8,7 +8,7 @@ struct SplitSettings: View {
 
     var body: some View {
         let splits = CustomSplit.all(in: store.preferences)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.s + 2) {
             ToggleRow(
                 title: "Split Inbox", detail: "Important mail first, then your splits, then Other: newsletters and notifications.",
                 isOn: Binding(get: { store.preferences["split_inbox"]?.bool ?? false }, set: { store.setPreference("split_inbox", .bool($0)) })
@@ -17,12 +17,7 @@ struct SplitSettings: View {
                 if editing?.id == split.id {
                     SplitForm(split: split, labels: labels) { editing = nil }
                 } else {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(split.name).font(.ui(14))
-                            Text(summary(split)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
-                        }
-                        Spacer()
+                    ItemRow(title: split.name, detail: summary(split)) {
                         IconButton(symbol: .chevronUp, help: "Move up") { move(splits, from: index, by: -1) }
                             .disabled(index == 0)
                         IconButton(symbol: .chevronDown, help: "Move down") { move(splits, from: index, by: 1) }
@@ -78,31 +73,26 @@ private struct SplitForm: View {
     @State private var senders = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            InputField(label: "Name", text: $split.name, placeholder: "Team", autofocus: split.name.isEmpty)
-            InputField(label: "From", text: $senders, placeholder: "ann@example.com, @example.com")
-            if !labels.isEmpty {
-                Picker("With the label", selection: $split.label) {
-                    Text("None").tag(String?.none)
-                    ForEach(labels, id: \.id) { label in Text(label.name).tag(String?.some(label.id)) }
+        Card {
+            VStack(alignment: .leading, spacing: Space.m) {
+                InputField(label: "Name", text: $split.name, placeholder: "Team", autofocus: split.name.isEmpty)
+                InputField(label: "From", text: $senders, placeholder: "ann@example.com, @example.com")
+                if !labels.isEmpty {
+                    Dropdown(label: "With the label", options: labels.map(\.id), selection: $split.label, none: "None") { id in
+                        labels.first { $0.id == id }?.name ?? id
+                    }
                 }
-                .font(.ui(13))
-                .fixedSize()
-            }
-            HStack(spacing: 8) {
-                ActionButton(title: "Save", variant: .primary) {
-                    split.name = split.name.trimmingCharacters(in: .whitespaces)
-                    split.from = senders.split(whereSeparator: { ", ;\n".contains($0) }).map { $0.lowercased() }
-                    store.setPreference(split.key, split.value)
-                    done()
-                }
-                .disabled(split.name.trimmingCharacters(in: .whitespaces).isEmpty)
-                ActionButton(title: "Cancel", variant: .ghost, action: done)
+                FormButtons(saveDisabled: split.name.trimmingCharacters(in: .whitespaces).isEmpty, onSave: save, onCancel: done)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Tokens.card.color))
         .onAppear { senders = split.from.joined(separator: ", ") }
+    }
+
+    private func save() {
+        split.name = split.name.trimmingCharacters(in: .whitespaces)
+        split.from = senders.split(whereSeparator: { ", ;\n".contains($0) }).map { $0.lowercased() }
+        store.setPreference(split.key, split.value)
+        done()
     }
 }
 
@@ -114,15 +104,12 @@ struct BlockedSettings: View {
         let blocked = store.preferences.filter { $0.key.hasPrefix("blocked:") && $0.value.bool != false }
             .map { String($0.key.dropFirst("blocked:".count)) }
             .sorted()
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             if blocked.isEmpty {
-                Text("No one is blocked.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                Notice(text: "No one is blocked.")
             }
             ForEach(blocked, id: \.self) { address in
-                HStack(spacing: 10) {
-                    Image(.ban, size: 13).foregroundStyle(Tokens.mutedMoreForeground.color)
-                    Text(address).font(.ui(14))
-                    Spacer()
+                ItemRow(title: address, symbol: .ban) {
                     ActionButton(title: "Unblock", variant: .ghost) { store.setPreference("blocked:\(address)", nil) }
                 }
             }
@@ -135,7 +122,7 @@ struct NotificationSettings: View {
     @Environment(MailStore.self) private var store
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.s + 2) {
             ForEach(store.accounts) { account in
                 ToggleRow(
                     title: account.address,

@@ -22,41 +22,20 @@ struct CommandPalette: View {
 
     var body: some View {
         let found = Self.filter(items, by: query)
-        VStack(spacing: 0) {
-            SearchField(
-                placeholder: scope == .labels ? "Go to a label" : "Type a command or a place to go", text: $query,
-                submit: { run(found, highlighted) }, move: { highlighted = max(0, min(highlighted + $0, found.count - 1)) },
-                escape: { store.palette = nil }
-            )
-            ScrollViewReader { scroller in
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(found.enumerated()), id: \.element.id) { index, item in
-                            ChoiceRow(title: item.title, detail: item.shortcut, symbol: item.symbol, highlighted: index == highlighted) {
-                                run(found, index)
-                            }
-                            .id(item.id)
-                        }
-                        if found.isEmpty {
-                            Text("Nothing by that name.")
-                                .font(.ui(13))
-                                .foregroundStyle(Tokens.mutedMoreForeground.color)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                        }
+        Sheet(title: scope == .labels ? "Go to a label" : "Commands", size: .medium) {
+            VStack(spacing: 0) {
+                SearchField(
+                    placeholder: scope == .labels ? "Go to a label" : "Type a command or a place to go", text: $query,
+                    submit: { run(found, highlighted) }, move: { highlighted = highlighted.moved(by: $0, in: found.count) },
+                    escape: { store.palette = nil }
+                )
+                ChoiceList(items: found, highlighted: highlighted, empty: "Nothing by that name.") { index, item in
+                    ChoiceRow(title: item.title, detail: item.shortcut, symbol: item.symbol, highlighted: index == highlighted) {
+                        run(found, index)
                     }
-                    .padding(8)
-                }
-                .onChange(of: highlighted) { _, index in
-                    guard found.indices.contains(index) else { return }
-                    scroller.scrollTo(found[index].id)
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 560, height: 440, alignment: .top)
-        #endif
-        .background(Tokens.popover.color)
         .onChange(of: query) { highlighted = 0 }
         .task {
             guard scope == .everything, !store.targets.isEmpty else { return }
@@ -137,6 +116,7 @@ struct CommandPalette: View {
         items += [
             PaletteItem(id: "settings", title: "Settings", symbol: .settings, shortcut: "⌘,", afterClosing: true) { store.settingsOpen = true },
             PaletteItem(id: "shortcuts", title: "Keyboard shortcuts", symbol: .keyboard, shortcut: "?", afterClosing: true) { store.shortcutsOpen = true },
+            PaletteItem(id: "gallery", title: "Component gallery", symbol: .monitor, afterClosing: true) { store.galleryOpen = true },
         ]
         return items
     }

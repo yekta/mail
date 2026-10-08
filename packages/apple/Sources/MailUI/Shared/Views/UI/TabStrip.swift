@@ -9,27 +9,38 @@ struct TabStrip<Tab: Identifiable & Hashable>: View {
     let pick: (Tab) -> Void
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 0) {
             ForEach(tabs) { tab in
-                let chosen = tab.id == selected
                 Button {
                     pick(tab)
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(title(tab)).font(.ui(13, chosen ? .semibold : .regular))
-                        if count(tab) > 0 {
-                            Text("\(count(tab))").font(.ui(11.5)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                        }
-                    }
-                    .foregroundStyle(chosen ? Tokens.foreground.color : Tokens.mutedForeground.color)
-                    .frame(height: 34 * Platform.scale)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(chosen ? Tokens.primary.color : .clear).frame(height: 2)
-                    }
-                    .contentShape(Rectangle())
+                    Face(title: title(tab), count: count(tab), chosen: tab.id == selected)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.press)
             }
+        }
+    }
+
+    private struct Face: View {
+        let title: String
+        let count: Int
+        let chosen: Bool
+        @Environment(\.hovered) private var hovered
+
+        var body: some View {
+            HStack(spacing: Space.xs + 2) {
+                Text(title).font((chosen ? TextStyle.labelStrong : .label).font)
+                if count > 0 {
+                    Text("\(count)").textStyle(.footnote)
+                }
+            }
+            .foregroundStyle(chosen || hovered ? Tokens.foreground.color : Tokens.mutedForeground.color)
+            .padding(.horizontal, Space.s + 1)
+            .frame(height: Theme.rowHeight * Platform.scale)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(chosen ? Tokens.primary.color : .clear).frame(height: 2)
+            }
+            .contentShape(Rectangle())
         }
     }
 }

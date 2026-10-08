@@ -39,8 +39,42 @@ struct ThemeColor {
     var color: Color { Color(platform) }
 }
 
-/// The sizes the apps are drawn with, measured from Newton Mail.
+/// The distances between things. Views space with these, never a number of their own.
+enum Space {
+    /// Inside a control: an icon and its words.
+    static let xs: CGFloat = 4
+    /// Between controls on a line.
+    static let s: CGFloat = 8
+    /// Between the lines of a block.
+    static let m: CGFloat = 12
+    /// Between blocks, and a page's inset on a phone.
+    static let l: CGFloat = 16
+    /// A page's inset on the Mac.
+    static let xl: CGFloat = 20
+    /// Between the sections of a page.
+    static let xxl: CGFloat = 28
+}
+
+/// The sizes the apps are drawn with, measured from Newton Mail. Those of controls are as on
+/// the Mac; the components enlarge them on iOS with `Platform.scale`.
 enum Theme {
+    static let radius = Tokens.radius
+    /// A card or a popup, which rounds a little more than a control.
+    static let cardRadius = Tokens.radius + 2
+    /// A hairline: a rule, a border.
+    static let hairline: CGFloat = 1
+
+    /// A text field, as tall as the regular control.
+    static let fieldHeight: CGFloat = ControlSize.regular.height
+    /// A row of a list or a menu.
+    static let rowHeight: CGFloat = ControlSize.regular.height
+    /// A chip: the smallest thing that can be clicked.
+    static let chipHeight: CGFloat = ControlSize.small.height
+    /// A bar across the window: the top bar, a sheet's header, a toolbar.
+    static let barHeight: CGFloat = 52
+    /// A search field in a sheet.
+    static let searchHeight: CGFloat = ControlSize.large.height
+
     /// A thread row on the Mac: one line.
     static let macRowHeight: CGFloat = 48
     /// A thread row on iOS: sender, subject, snippet.
@@ -50,7 +84,6 @@ enum Theme {
     /// The widest the list and the thread's card grow on the Mac.
     static let cardWidth: CGFloat = 1000
     static let sidebarWidth: CGFloat = 232
-    static let radius = Tokens.radius
 
     static let accountColors = [
         Tokens.account1, Tokens.account2, Tokens.account3, Tokens.account4, Tokens.account5,
