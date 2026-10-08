@@ -32,6 +32,9 @@ struct SidebarView: View {
                 }
                 .padding(.vertical, Space.s)
             }
+            #if os(iOS)
+            .scrollIndicators(.hidden)
+            #endif
             footer
         }
         .background(Tokens.background.color)
