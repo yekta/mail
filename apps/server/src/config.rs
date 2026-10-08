@@ -55,7 +55,7 @@ impl Config {
             initial_sync_limit: number("INITIAL_SYNC_LIMIT", 2000)? as usize,
             gmail_pubsub_topic: optional("GMAIL_PUBSUB_TOPIC"),
             gmail_hook_token: optional("GMAIL_HOOK_TOKEN"),
-            poll_interval: Duration::from_secs(number("POLL_SECONDS", 30)?),
+            poll_interval: Duration::from_secs(number("POLL_SECONDS", 10)?),
             workers: true,
         })
     }

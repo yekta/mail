@@ -533,7 +533,7 @@ impl Gmail {
 
     pub async fn watch(&self, state: &AppState) -> anyhow::Result<()> {
         let Some(topic) = &state.config.gmail_pubsub_topic else { return Ok(()) };
-        let body = json!({ "topicName": topic, "labelFilterBehavior": "include", "labelIds": ["INBOX"] });
+        let body = json!({ "topicName": topic });
         let _: Value = self.request(Method::POST, "/watch", &[], Some(&body)).await?;
         Ok(())
     }

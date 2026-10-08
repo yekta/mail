@@ -43,7 +43,8 @@ cargo run --release -p mail-server   # on http://localhost:3000
 | `DATABASE_URL` | Postgres. The server runs its migrations when it starts |
 | `SECRET_KEY` | Seals the mail credentials the server keeps. Any long random text (`openssl rand -hex 32`); changing it loses access to every account |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | The Google OAuth client, below. Without them Gmail can't be added |
-| `GMAIL_PUBSUB_TOPIC`, `GMAIL_HOOK_TOKEN` | Optional: Gmail pushes changes to a Pub/Sub topic whose push subscription calls `{PUBLIC_URL}/hooks/gmail?token={GMAIL_HOOK_TOKEN}`. Without them Gmail is polled every 30 seconds |
+| `GMAIL_PUBSUB_TOPIC`, `GMAIL_HOOK_TOKEN` | Optional: Gmail pushes changes to a Pub/Sub topic whose push subscription calls `{PUBLIC_URL}/hooks/gmail?token={GMAIL_HOOK_TOKEN}`. Without them new Gmail mail waits for the next poll |
+| `POLL_SECONDS` | How often an account is synced when the provider pushed nothing. JMAP servers push over their event source. 10 by default |
 | `INITIAL_SYNC_LIMIT` | How many messages an account's first sync fetches before older mail is filled in. 2000 by default |
 | `DEV_LOGIN` | `1` gives sessions without an account, for tests. Never set it in production |
 
