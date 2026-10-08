@@ -38,7 +38,7 @@ struct BottomTabs<Tab: Identifiable & Hashable>: View {
             VStack(spacing: Space.xs - 1) {
                 Image(symbol, size: 18).foregroundStyle(foreground)
                 HStack(spacing: Space.xs - 1) {
-                    Text(title).textStyle(.footnote, color: foreground).lineLimit(1)
+                    Text(title).textStyle(chosen ? .footnoteStrong : .footnote, color: foreground).lineLimit(1)
                     if count > 0 {
                         Text("\(count)").textStyle(.footnote).lineLimit(1).fixedSize()
                     }
@@ -52,7 +52,7 @@ struct BottomTabs<Tab: Identifiable & Hashable>: View {
         }
 
         private var foreground: Color {
-            chosen || hovered ? Tokens.foreground.color : Tokens.mutedForeground.color
+            chosen || hovered ? Tokens.foreground.color : Tokens.mutedMoreForeground.color
         }
     }
 }

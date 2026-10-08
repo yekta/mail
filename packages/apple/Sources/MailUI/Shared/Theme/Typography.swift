@@ -23,6 +23,8 @@ enum TextStyle {
     case caption
     /// The smallest words: a count, a field's label.
     case footnote
+    /// The smallest words when they must stand out: the chosen tab.
+    case footnoteStrong
     /// A section's name, in capitals.
     case overline
     /// Keys and codes.
@@ -36,14 +38,14 @@ enum TextStyle {
         case .subheading, .body, .bodyStrong: 14
         case .label, .labelStrong: 13
         case .caption, .mono: 12
-        case .footnote, .overline: 11
+        case .footnote, .footnoteStrong, .overline: 11
         }
     }
 
     var weight: PlatformFont.Weight {
         switch self {
         case .display, .title, .heading, .subheading, .overline: .semibold
-        case .bodyStrong, .labelStrong: .medium
+        case .bodyStrong, .labelStrong, .footnoteStrong: .medium
         case .body, .label, .caption, .footnote, .mono: .regular
         }
     }
@@ -52,7 +54,7 @@ enum TextStyle {
     var color: Color {
         switch self {
         case .display, .title, .heading, .subheading, .body, .bodyStrong, .label, .labelStrong: Tokens.foreground.color
-        case .caption, .footnote, .overline: Tokens.mutedMoreForeground.color
+        case .caption, .footnote, .footnoteStrong, .overline: Tokens.mutedMoreForeground.color
         case .mono: Tokens.mutedForeground.color
         }
     }
