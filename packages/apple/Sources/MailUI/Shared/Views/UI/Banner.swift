@@ -17,7 +17,7 @@ struct Banner: View {
         }
         .padding(.horizontal, Space.xl)
         .frame(height: 44 * Platform.scale)
-        .background(Tokens.accent.color)
+        .background(Tokens.accentLargerStronger.color)
         .rule(.bottom)
     }
 }

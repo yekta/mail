@@ -33,8 +33,7 @@ private struct Segment: View {
             .textStyle(chosen ? .labelStrong : .label, color: chosen || hovered ? Tokens.foreground.color : Tokens.mutedForeground.color)
             .padding(.horizontal, Space.m)
             .frame(height: ControlSize.small.height * Platform.scale)
-            .background(RoundedRectangle(cornerRadius: Theme.radius - 1).fill(chosen ? Tokens.card.color : hovered ? Tokens.accentStronger.color : .clear))
-            .shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: chosen ? 2 : 0, y: 1)
+            .background(RoundedRectangle(cornerRadius: Theme.radius - 1).fill(chosen ? Tokens.accentStronger.color : hovered ? Tokens.accent.color : .clear))
             .contentShape(RoundedRectangle(cornerRadius: Theme.radius - 1))
     }
 }
@@ -90,7 +89,7 @@ private struct DropdownFace: View {
         }
         .padding(.horizontal, Space.s + 2)
         .frame(height: Theme.fieldHeight * Platform.scale)
-        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(hovered ? Tokens.accentStronger.color : Tokens.card.color))
+        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(hovered ? Tokens.accent.color : Tokens.card.color))
         .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Tokens.input.color, lineWidth: Theme.hairline))
         .contentShape(RoundedRectangle(cornerRadius: Theme.radius))
     }

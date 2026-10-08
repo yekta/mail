@@ -36,7 +36,7 @@ struct ChoiceRow: View {
             }
             .padding(.horizontal, Space.s + 2)
             .frame(minHeight: Theme.rowHeight * Platform.scale)
-            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(highlighted || hovered ? Tokens.accent.color : .clear))
+            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(highlighted ? Tokens.accentLargerStronger.color : hovered ? Tokens.accentLarger.color : .clear))
             .contentShape(Rectangle())
         }
     }
