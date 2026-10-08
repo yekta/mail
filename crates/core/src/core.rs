@@ -610,6 +610,7 @@ impl Core {
         let messages = self.store.thread_messages(thread)?;
         let Some(last) = messages.last() else { bail!("This conversation is gone.") };
         let images = images || self.store.preference("remote_images") != Some(json!(false));
+        let dark = self.store.preference("dark_mail") != Some(json!(false));
         let me = self.store.me();
         let now = Local::now();
         let mut people: Vec<Address> = Vec::new();
@@ -619,7 +620,9 @@ impl Core {
             people.push(message.from.clone());
             people.extend(message.recipients.to.iter().cloned());
             people.extend(message.recipients.cc.iter().cloned());
-            let page = self.store.body(&message.id).map(|body| html::page(&body, images));
+            let body = self.store.body(&message.id);
+            let designed = body.as_ref().and_then(|body| body.html.as_deref()).is_some_and(html::is_designed);
+            let page = body.map(|body| html::page(&body, images, dark));
             let failed = page.is_none() && self.body_failed_lately(&message.id);
             if page.is_none() && !failed {
                 missing.push(message.id.clone());
@@ -648,6 +651,7 @@ impl Core {
                 unread: message.unread,
                 folded: index + 1 < messages.len() && !message.unread,
                 blocked_images: page.as_ref().is_some_and(|page| page.blocked_images),
+                designed,
                 html: page.map(|page| page.html),
                 failed,
                 attachments: message

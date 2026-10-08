@@ -123,6 +123,8 @@ public final class MailStore {
     var downloading: Set<String> = []
     /// Messages of the open thread unfolded by a click or the keyboard.
     var unfoldedMessages: Set<String> = []
+    /// Designed messages of the open thread shown as their sender made them, not turned dark.
+    var originalMessages: Set<String> = []
     /// The message of the open thread that n and p are on.
     var focusedMessage: String?
     /// Each compose sheet's last save, so the next save and the send wait for it.
@@ -478,6 +480,7 @@ public final class MailStore {
         }
         if conversation?.id != thread {
             unfoldedMessages = []
+            originalMessages = []
             focusedMessage = nil
             threadOffset = 0
         }
@@ -509,6 +512,13 @@ public final class MailStore {
         guard let open = conversation?.id else { return }
         imagesShown.insert(open)
         Task { await reopen() }
+    }
+
+    /// Whether designed mail is turned dark in dark mode.
+    var darkMail: Bool { preferences["dark_mail"]?.bool ?? true }
+
+    func toggleOriginal(_ message: String) {
+        if originalMessages.contains(message) { originalMessages.remove(message) } else { originalMessages.insert(message) }
     }
 
     func close() {
@@ -842,7 +852,7 @@ public final class MailStore {
         Task {
             do {
                 _ = try await bridge.call("set_preference", fields, as: Empty.self)
-                if key == "remote_images" { await reopen() }
+                if key == "remote_images" || key == "dark_mail" { await reopen() }
             } catch {
                 show(error.localizedDescription)
                 await loadPreferences()

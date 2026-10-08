@@ -149,6 +149,22 @@ struct NotificationSettings: View {
     }
 }
 
+/// Whether designed mail is turned dark in dark mode, or left as its sender made it.
+struct DarkMailSettings: View {
+    @Environment(MailStore.self) private var store
+
+    var body: some View {
+        ToggleRow(
+            title: "Dark mode for mail",
+            detail: "In dark mode, newsletters and other designed mail are drawn in dark colours. Each message can show the original.",
+            isOn: Binding(
+                get: { store.darkMail },
+                set: { store.setPreference("dark_mail", $0 ? nil : .bool(false)) }
+            )
+        )
+    }
+}
+
 /// Whether the images a message loads from the web are shown without asking.
 struct ImageSettings: View {
     @Environment(MailStore.self) private var store

@@ -90,7 +90,8 @@ events out through the callback given to `mail_core_start`) and a Rust library f
 - `search.rs`: Gmail's search operators over FTS5. `undo.rs`: the ops that take an action back.
 - `link.rs`: the sync socket, reconnecting with backoff. `http.rs`: the server's HTTP API.
 - `render/`: what the apps draw. `rows.rs` ("Alice, me (3)"), `dates.rs`, `html.rs` (sanitized
-  pages, remote images blocked, designed mail on a light paper card), `text.rs` (plain text with
+  pages, remote images blocked, designed mail on a paper card), `dark.rs` (the mail's own colours
+  turned for the dark scheme, with the original a class away), `text.rs` (plain text with
   links and folded quotes), `drafts.rs` (reply, reply all, forward), `compose.rs` (what is sent:
   the signature, the quote, the HTML) and `times.rs` (snooze and send-later times, typed or
   chosen).

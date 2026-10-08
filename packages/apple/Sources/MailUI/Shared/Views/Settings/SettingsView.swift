@@ -51,6 +51,7 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
+                    DarkMailSettings()
                 }
                 SettingsSection(title: "Undo send") {
                     Picker("", selection: $store.undoDelay) {

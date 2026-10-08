@@ -55,6 +55,7 @@ final class WebViewPool {
     func give(_ view: MessageWKWebView) {
         view.onHeight = nil
         view.loaded = nil
+        view.original = false
         view.loadHTMLString("", baseURL: nil)
         if spare.count < 8 { spare.append(view) }
     }
@@ -71,11 +72,22 @@ private final class HeightReporter: NSObject, WKScriptMessageHandler {
 final class MessageWKWebView: WKWebView, WKNavigationDelegate {
     var onHeight: ((CGFloat) -> Void)?
     var loaded: String?
+    /// The page shown as its sender made it: the `dark` class the core put on its body taken off.
+    var original = false { didSet { if original != oldValue { applyOriginal() } } }
 
     func show(_ html: String) {
         guard loaded != html else { return }
         loaded = html
         loadHTMLString(html, baseURL: nil)
+    }
+
+    private func applyOriginal() {
+        let script = "document.body && document.body.classList.toggle('dark', \(original ? "false" : "true"));"
+        evaluateJavaScript(script, in: nil, in: .defaultClient) { _ in }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if original { applyOriginal() }
     }
 
     /// Links open in the browser; the card never navigates.
@@ -96,19 +108,21 @@ final class MessageWKWebView: WKWebView, WKNavigationDelegate {
     #endif
 }
 
-/// A message body, as tall as its page.
+/// A message body, as tall as its page. `original` shows a designed mail as its sender made it.
 struct MessageWebView: View {
     let html: String
+    var original = false
     @State private var height: CGFloat = 40
 
     var body: some View {
-        WebRepresentable(html: html, height: $height).frame(height: height)
+        WebRepresentable(html: html, original: original, height: $height).frame(height: height)
     }
 }
 
 #if os(macOS)
 private struct WebRepresentable: NSViewRepresentable {
     let html: String
+    let original: Bool
     @Binding var height: CGFloat
 
     func makeNSView(context: Context) -> MessageWKWebView {
@@ -116,11 +130,13 @@ private struct WebRepresentable: NSViewRepresentable {
         view.onHeight = { reported in
             DispatchQueue.main.async { if abs(height - reported) > 0.5 { height = max(reported, 20) } }
         }
+        view.original = original
         view.show(html)
         return view
     }
 
     func updateNSView(_ view: MessageWKWebView, context: Context) {
+        view.original = original
         view.show(html)
     }
 
@@ -131,6 +147,7 @@ private struct WebRepresentable: NSViewRepresentable {
 #else
 private struct WebRepresentable: UIViewRepresentable {
     let html: String
+    let original: Bool
     @Binding var height: CGFloat
 
     func makeUIView(context: Context) -> MessageWKWebView {
@@ -138,11 +155,13 @@ private struct WebRepresentable: UIViewRepresentable {
         view.onHeight = { reported in
             DispatchQueue.main.async { if abs(height - reported) > 0.5 { height = max(reported, 20) } }
         }
+        view.original = original
         view.show(html)
         return view
     }
 
     func updateUIView(_ view: MessageWKWebView, context: Context) {
+        view.original = original
         view.show(html)
     }
 

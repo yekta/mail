@@ -82,6 +82,8 @@ struct MessageItem: Codable, Identifiable, Hashable {
     let html: String?
     let failed: Bool
     let blockedImages: Bool
+    /// The mail brings its own design; in dark mode its colours are turned unless the original is asked for.
+    let designed: Bool
     let attachments: [Attachment]
 }
 

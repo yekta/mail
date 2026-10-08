@@ -21,6 +21,8 @@
 //! - `notify:<account id>`: `false` stops notifications for that account.
 //! - `remote_images`: `false` leaves the images a message loads from the web out until the user
 //!   asks for them, so the sender doesn't learn the mail was opened. By default they are shown.
+//! - `dark_mail`: `false` keeps designed mail as its sender made it in the dark scheme. By
+//!   default its colours are turned to dark, and each page can be asked for the original.
 
 use mail_protocol::{Address, Attachment, Draft, Identity};
 use serde::{Deserialize, Serialize};
@@ -494,6 +496,9 @@ pub struct MessageView {
     pub failed: bool,
     /// Remote images were left out; `OpenThread` with `images` shows them.
     pub blocked_images: bool,
+    /// The mail brings its own design: in the dark scheme its colours are turned, and the page
+    /// can show the original.
+    pub designed: bool,
     /// Open one with `OpenAttachment` and its place in this list.
     pub attachments: Vec<Attachment>,
 }

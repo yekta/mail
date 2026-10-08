@@ -243,6 +243,7 @@ struct ThreadScreen: View {
 /// One message of a thread. Its sender opens the person; its files open in Quick Look.
 struct MessageCard: View {
     @Environment(MailStore.self) private var store
+    @Environment(\.colorScheme) private var colorScheme
     let message: MessageItem
     let folded: Bool
     let showPerson: () -> Void
@@ -270,11 +271,17 @@ struct MessageCard: View {
                     Image(.paperclip, size: 13).foregroundStyle(Tokens.mutedForeground.color)
                 }
                 Text(message.date).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                if canShowOriginal {
+                    IconButton(
+                        symbol: original ? .moon : .sun, help: original ? "Show in dark colours" : "Show the original",
+                        tint: Tokens.mutedForeground.color, circled: false
+                    ) { store.toggleOriginal(message.id) }
+                }
             }
             if !folded {
                 Group {
                     if let html = message.html {
-                        MessageWebView(html: html)
+                        MessageWebView(html: html, original: original)
                     } else if message.failed {
                         Text("This message couldn't be loaded. Open the conversation again to retry.")
                             .font(.ui(14))
@@ -286,13 +293,29 @@ struct MessageCard: View {
                             .redacted(reason: .placeholder)
                     }
                 }
-                .padding(.leading, 46 * Platform.scale)
+                .padding(.leading, bodyIndent)
                 if !message.attachments.isEmpty {
-                    attachments.padding(.leading, 46 * Platform.scale)
+                    attachments.padding(.leading, bodyIndent)
                 }
             }
         }
         .padding(.vertical, 16)
+    }
+
+    /// On the Mac the body lines up with the name beside the avatar; a phone has no width to spare.
+    private var bodyIndent: CGFloat {
+        #if os(macOS)
+        46
+        #else
+        0
+        #endif
+    }
+
+    private var original: Bool { store.originalMessages.contains(message.id) }
+
+    /// Designed mail, turned dark, can be shown as its sender made it.
+    private var canShowOriginal: Bool {
+        !folded && message.designed && message.html != nil && colorScheme == .dark && store.darkMail
     }
 
     private var attachments: some View {
