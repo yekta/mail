@@ -41,7 +41,7 @@ pub struct Account {
     pub address: String,
     /// `syncing`, `ready`, `reauth` (the provider wants the user to sign in again) or `error`.
     pub status: String,
-    /// The theme colour of its dot, `chart-1` to `chart-5`.
+    /// The theme colour of its dot, `account-1` to `account-10`.
     pub color: String,
     /// The addresses it can send as, the account's own first.
     #[serde(default)]

@@ -67,7 +67,7 @@ async fn a_link_ticket_adds_a_second_account_to_the_same_user(db: PgPool) {
     let work =
         db::account_by_login(&server.state.db, Provider::Gmail, "ann.work@gmail.com", "").await.unwrap().unwrap();
     assert_eq!(work.user_id, user);
-    assert_eq!(work.color, "chart-2");
+    assert_eq!(work.color, "account-2");
 
     // A ticket works once.
     let reused =

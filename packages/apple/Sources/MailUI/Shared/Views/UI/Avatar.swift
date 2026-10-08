@@ -7,7 +7,7 @@ struct Avatar: View {
     var size: CGFloat = 32
 
     private var tint: Color {
-        let colors = [Tokens.chart1, Tokens.chart2, Tokens.chart3, Tokens.chart4, Tokens.chart5]
+        let colors = Theme.accountColors
         let sum = email.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xffff }
         return colors[sum % colors.count].color
     }
@@ -17,7 +17,7 @@ struct Avatar: View {
             .font(.ui(size * 0.4, .semibold))
             .foregroundStyle(.white)
             .frame(width: size * Platform.scale, height: size * Platform.scale)
-            .background(Circle().fill(tint.opacity(0.85)))
+            .background(Circle().fill(tint))
             .accessibilityHidden(true)
     }
 }

@@ -18,7 +18,7 @@ struct SidebarView: View {
                     if !store.accounts.isEmpty {
                         Text("ACCOUNTS")
                             .font(.ui(10.5, .semibold))
-                            .foregroundStyle(Tokens.sidebarForeground.color.opacity(0.55))
+                            .foregroundStyle(Tokens.mutedMostForeground.color)
                             .padding(.horizontal, 18)
                             .padding(.top, 22)
                             .padding(.bottom, 6)
@@ -36,7 +36,7 @@ struct SidebarView: View {
             }
             footer
         }
-        .background(Tokens.sidebar.color)
+        .background(Tokens.card.color)
     }
 
     private func row(_ mailbox: Mailbox, symbol: Symbol, indent: CGFloat = 0) -> some View {
@@ -50,14 +50,14 @@ struct SidebarView: View {
                 Text(mailbox.name).font(.ui(13.5, selected ? .medium : .regular)).lineLimit(1)
                 Spacer()
                 if mailbox.unread > 0 {
-                    Text("\(mailbox.unread)").font(.ui(12)).foregroundStyle(Tokens.sidebarForeground.color.opacity(0.7))
+                    Text("\(mailbox.unread)").font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
             }
-            .foregroundStyle(selected ? Tokens.sidebarAccentForeground.color : Tokens.sidebarForeground.color)
+            .foregroundStyle(selected ? Tokens.accentForeground.color : Tokens.foreground.color)
             .padding(.leading, 18 + indent)
             .padding(.trailing, 16)
             .frame(height: 34 * Platform.scale)
-            .background(selected ? Tokens.sidebarAccent.color : .clear)
+            .background(selected ? Tokens.accent.color : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -76,9 +76,9 @@ struct SidebarView: View {
                 } else if account.status == "reauth" || account.status == "error" {
                     Image(.circleAlert, size: 13).foregroundStyle(Tokens.destructive.color)
                 }
-                Image(expanded.contains(account.id) ? .chevronDown : .chevronRight, size: 12).opacity(0.6)
+                Image(expanded.contains(account.id) ? .chevronDown : .chevronRight, size: 12).foregroundStyle(Tokens.mutedMostForeground.color)
             }
-            .foregroundStyle(Tokens.sidebarForeground.color)
+            .foregroundStyle(Tokens.foreground.color)
             .padding(.leading, 18)
             .padding(.trailing, 16)
             .frame(height: 34 * Platform.scale)
@@ -94,17 +94,17 @@ struct SidebarView: View {
                     Image(.settings, size: 15)
                     Text("Settings").font(.ui(13))
                 }
-                .foregroundStyle(Tokens.sidebarForeground.color)
+                .foregroundStyle(Tokens.foreground.color)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             Spacer()
             if store.connection == "offline" {
-                Image(.wifiOff, size: 14).foregroundStyle(Tokens.sidebarForeground.color.opacity(0.7)).help("Offline")
+                Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
             }
         }
         .padding(.horizontal, 18)
         .frame(height: 48)
-        .overlay(alignment: .top) { Rectangle().fill(Tokens.sidebarBorder.color).frame(height: 1) }
+        .overlay(alignment: .top) { Rectangle().fill(Tokens.border.color).frame(height: 1) }
     }
 }

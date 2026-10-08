@@ -29,7 +29,7 @@ private struct SignatureEditor: View {
             InputField(label: account.address, text: Binding(get: { text }, set: { text = $0; edited = true }), placeholder: provided ?? "No signature", lines: 4)
             if provided != nil, text.isEmpty {
                 Text("The signature kept by \(account.provider == "gmail" ? "Gmail" : "your provider") is used.")
-                    .font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                    .font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
             }
         }
         .onAppear {
@@ -69,7 +69,7 @@ struct SnippetSettings: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(snippet.name).font(.ui(14))
                             Text(snippet.text.replacingOccurrences(of: "\n", with: " "))
-                                .font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).lineLimit(1)
+                                .font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
                         }
                         Spacer()
                         IconButton(symbol: .pencil, help: "Edit") { editing = snippet }

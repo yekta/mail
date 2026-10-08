@@ -235,14 +235,14 @@ struct ComposeView: View {
             )
             .frame(height: max(bodyHeight, 160))
             if let signature {
-                Text(signature).font(.ui(14)).foregroundStyle(Tokens.mutedForeground.color).textSelection(.enabled)
+                Text(signature).font(.ui(14)).foregroundStyle(Tokens.mutedMoreForeground.color).textSelection(.enabled)
             }
             if let quote = compose.draft.quote, !quote.isEmpty {
                 Chip(title: "•••", help: showQuote ? "Hide the quoted text" : "Show the quoted text", action: { showQuote.toggle() })
                 if showQuote {
                     Text(quote)
                         .font(.ui(13))
-                        .foregroundStyle(Tokens.mutedForeground.color)
+                        .foregroundStyle(Tokens.mutedMoreForeground.color)
                         .textSelection(.enabled)
                         .padding(.leading, 12)
                         .overlay(alignment: .leading) { Rectangle().fill(Tokens.border.color).frame(width: 2) }
@@ -273,7 +273,7 @@ struct ComposeView: View {
                 .keyboardShortcut("u", modifiers: [.command, .shift])
             IconButton(symbol: .zap, help: "Snippets (⌘;), or type ; and a name") { pickingSnippet = true }
                 .keyboardShortcut(";", modifiers: .command)
-            IconButton(symbol: .alarmClock, help: "Remind me if nobody replies (⌘⇧H)", tint: compose.remindAt == nil ? Tokens.secondaryForeground.color : Tokens.primary.color) {
+            IconButton(symbol: .alarmClock, help: "Remind me if nobody replies (⌘⇧H)", tint: compose.remindAt == nil ? Tokens.mutedForeground.color : Tokens.primary.color) {
                 timing = .remind
             }
             .keyboardShortcut("h", modifiers: [.command, .shift])
@@ -324,7 +324,7 @@ struct ComposeView: View {
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text(label).font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color).frame(width: 56, alignment: .leading)
+                Text(label).font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color).frame(width: 56, alignment: .leading)
                 content()
             }
             .font(.ui(14))

@@ -146,14 +146,14 @@ struct ThreadScreen: View {
                         .textSelection(.enabled)
                     Text(conversation.participants)
                         .font(.ui(13))
-                        .foregroundStyle(Tokens.mutedForeground.color)
+                        .foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
                 Spacer(minLength: 0)
                 Button {
                     store.toggleStar(conversation.id)
                 } label: {
                     Image(conversation.starred ? .starFilled : .star, size: 20)
-                        .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedForeground.color)
+                        .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedMoreForeground.color)
                 }
                 .buttonStyle(.plain)
                 .help(conversation.starred ? "Unstar" : "Star")
@@ -174,7 +174,7 @@ struct ThreadScreen: View {
             }
             if conversation.messages.contains(where: \.blockedImages) {
                 HStack(spacing: 8) {
-                    Text("Images from the sender were left out.").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                    Text("Images from the sender were left out.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
                     ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
                 }
             }
@@ -189,7 +189,7 @@ struct ThreadScreen: View {
             HStack(spacing: 12) {
                 Image(.pencil, size: 14)
                 Text("Draft").font(.ui(14, .semibold))
-                Text("A reply you started").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                Text("A reply you started").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 Spacer(minLength: 8)
                 ActionButton(title: "Open", variant: .outline) { store.openDraft(id) }
             }
@@ -258,23 +258,23 @@ struct MessageCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(message.fromName)
                         .font(.ui(14, folded ? .regular : .semibold))
-                        .foregroundStyle(folded ? Tokens.mutedForeground.color : Tokens.foreground.color)
+                        .foregroundStyle(folded ? Tokens.mutedMoreForeground.color : Tokens.foreground.color)
                         .onTapGesture { if !folded { showPerson() } }
                         .help(folded ? "" : message.fromEmail)
                     Text(folded ? message.snippet : message.to)
                         .font(.ui(12.5))
-                        .foregroundStyle(Tokens.mutedForeground.color)
+                        .foregroundStyle(Tokens.mutedMoreForeground.color)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if !message.attachments.isEmpty {
-                    Image(.paperclip, size: 13).foregroundStyle(Tokens.mutedForeground.color)
+                    Image(.paperclip, size: 13).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
-                Text(message.date).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
+                Text(message.date).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 if canShowOriginal {
                     IconButton(
                         symbol: original ? .moon : .sun, help: original ? "Show in dark colours" : "Show the original",
-                        tint: Tokens.mutedForeground.color, circled: false
+                        tint: Tokens.mutedMoreForeground.color, circled: false
                     ) { store.toggleOriginal(message.id) }
                 }
             }
@@ -285,11 +285,11 @@ struct MessageCard: View {
                     } else if message.failed {
                         Text("This message couldn't be loaded. Open the conversation again to retry.")
                             .font(.ui(14))
-                            .foregroundStyle(Tokens.mutedForeground.color)
+                            .foregroundStyle(Tokens.mutedMoreForeground.color)
                     } else {
                         Text(message.snippet)
                             .font(.ui(14))
-                            .foregroundStyle(Tokens.mutedForeground.color)
+                            .foregroundStyle(Tokens.mutedMoreForeground.color)
                             .redacted(reason: .placeholder)
                     }
                 }

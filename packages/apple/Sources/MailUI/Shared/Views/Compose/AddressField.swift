@@ -17,7 +17,7 @@ struct AddressField<Accessory: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
-                Text(label).font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
+                Text(label).font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
                     .frame(width: 56, height: 24 * Platform.scale, alignment: .leading)
                 FlowLayout(spacing: 6, lineSpacing: 6) {
                     ForEach(Array(addresses.enumerated()), id: \.offset) { index, address in

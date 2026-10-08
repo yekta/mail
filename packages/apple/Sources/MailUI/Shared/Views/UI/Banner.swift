@@ -10,7 +10,7 @@ struct Banner: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(symbol, size: 14).foregroundStyle(Tokens.secondaryForeground.color)
+            Image(symbol, size: 14).foregroundStyle(Tokens.mutedForeground.color)
             Text(text).font(.ui(13)).foregroundStyle(Tokens.accentForeground.color).lineLimit(1)
             Spacer()
             ActionButton(title: action, variant: .primary, action: perform)

@@ -29,16 +29,16 @@ struct RowText {
     }
 
     init(_ row: ThreadRow) {
-        let strong = row.unread ? Tokens.foreground : Tokens.secondaryForeground
+        let strong = row.unread ? Tokens.foreground : Tokens.mutedForeground
         let weight: PlatformFont.Weight = row.unread ? .semibold : .regular
         senders = NSAttributedString(string: row.senders, attributes: Self.style(Self.sendersSize, weight, strong))
         let subjectText = row.subject.isEmpty ? "(no subject)" : row.subject
         subject = NSAttributedString(string: subjectText, attributes: Self.style(Self.subjectSize, weight, strong))
         let snippetText = row.snippet.replacingOccurrences(of: "\n", with: " ")
-        snippet = NSAttributedString(string: snippetText, attributes: Self.style(Self.snippetSize, .regular, Tokens.mutedForeground))
+        snippet = NSAttributedString(string: snippetText, attributes: Self.style(Self.snippetSize, .regular, Tokens.mutedMoreForeground))
         let line = NSMutableAttributedString(attributedString: subject)
         if !snippetText.isEmpty {
-            line.append(NSAttributedString(string: "  –  " + snippetText, attributes: Self.style(Self.snippetSize, .regular, Tokens.mutedForeground)))
+            line.append(NSAttributedString(string: "  –  " + snippetText, attributes: Self.style(Self.snippetSize, .regular, Tokens.mutedMoreForeground)))
         }
         self.line = line
         date = NSAttributedString(string: row.date, attributes: Self.style(Self.dateSize, row.unread ? .semibold : .regular, strong))

@@ -70,7 +70,7 @@ struct IOSStack: View {
             SidebarView(showSettings: { store.settingsOpen = true }, picked: { path.append(.mailbox($0)) })
                 .navigationTitle("Mailboxes")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(Tokens.sidebar.color, for: .navigationBar)
+                .toolbarBackground(Tokens.card.color, for: .navigationBar)
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .mailbox: MailboxScreen(path: $path)
@@ -102,8 +102,8 @@ struct MailboxScreen: View {
             ListHeader()
             if store.visibleRows.isEmpty {
                 VStack(spacing: 12) {
-                    Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedForeground.color.opacity(0.6))
-                    Text(emptyMessage).font(.ui(15)).foregroundStyle(Tokens.mutedForeground.color)
+                    Image(store.searchRows != nil ? .search : .inbox, size: 30).foregroundStyle(Tokens.mutedMostForeground.color)
+                    Text(emptyMessage).font(.ui(15)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Tokens.card.color)

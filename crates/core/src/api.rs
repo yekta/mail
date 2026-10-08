@@ -393,7 +393,7 @@ pub struct NewMail {
 pub struct ThreadRow {
     pub id: String,
     pub account_id: String,
-    /// The account's theme colour, `chart-1` to `chart-5`.
+    /// The account's theme colour, `account-1` to `account-10`.
     pub color: String,
     /// "Alice, me (3)".
     pub senders: String,

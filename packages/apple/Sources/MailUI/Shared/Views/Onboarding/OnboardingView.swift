@@ -13,7 +13,7 @@ struct OnboardingView: View {
                         .frame(width: 72 * Platform.scale, height: 72 * Platform.scale)
                         .background(Circle().fill(Tokens.primary.color))
                     Text("Mail").font(.ui(28, .semibold)).foregroundStyle(Tokens.foreground.color)
-                    Text("All your email, calm and fast.").font(.ui(14)).foregroundStyle(Tokens.mutedForeground.color)
+                    Text("All your email, calm and fast.").font(.ui(14)).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
                 .padding(.top, 48)
                 AddAccountForm()
@@ -42,7 +42,7 @@ struct AddAccountForm: View {
             ActionButton(title: "Continue with Google", symbol: .mail, variant: .primary, wide: true, action: store.signInWithGoogle)
             HStack(spacing: 10) {
                 rule
-                Text("or a JMAP server").font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).fixedSize()
+                Text("or a JMAP server").font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize()
                 rule
             }
             VStack(spacing: 12) {
@@ -63,7 +63,7 @@ struct AddAccountForm: View {
                 .padding(.top, 10)
             }
             .font(.ui(12))
-            .foregroundStyle(Tokens.mutedForeground.color)
+            .foregroundStyle(Tokens.mutedMoreForeground.color)
         }
         .onAppear { server = store.server }
     }

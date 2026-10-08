@@ -18,10 +18,10 @@ struct TabStrip<Tab: Identifiable & Hashable>: View {
                     HStack(spacing: 6) {
                         Text(title(tab)).font(.ui(13, chosen ? .semibold : .regular))
                         if count(tab) > 0 {
-                            Text("\(count(tab))").font(.ui(11.5)).foregroundStyle(Tokens.mutedForeground.color)
+                            Text("\(count(tab))").font(.ui(11.5)).foregroundStyle(Tokens.mutedMoreForeground.color)
                         }
                     }
-                    .foregroundStyle(chosen ? Tokens.foreground.color : Tokens.secondaryForeground.color)
+                    .foregroundStyle(chosen ? Tokens.foreground.color : Tokens.mutedForeground.color)
                     .frame(height: 34 * Platform.scale)
                     .overlay(alignment: .bottom) {
                         Rectangle().fill(chosen ? Tokens.primary.color : .clear).frame(height: 2)

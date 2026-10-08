@@ -13,12 +13,12 @@ struct ChoiceRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 if let symbol {
-                    Image(symbol, size: 14).foregroundStyle(Tokens.mutedForeground.color)
+                    Image(symbol, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
                 Text(title).font(.ui(14)).foregroundStyle(Tokens.foreground.color).lineLimit(1)
                 Spacer(minLength: 12)
                 if let detail {
-                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).lineLimit(1)
+                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
                 }
             }
             .padding(.horizontal, 10)
@@ -37,7 +37,7 @@ struct PopupCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(6)
-            .background(RoundedRectangle(cornerRadius: Theme.radius + 2).fill(Tokens.popover.color).shadow(color: .black.opacity(0.14), radius: 12, y: 4))
+            .background(RoundedRectangle(cornerRadius: Theme.radius + 2).fill(Tokens.popover.color).shadow(color: Tokens.shadow.opacity(Tokens.shadowStrongerOpacity).color, radius: 12, y: 4))
             .overlay(RoundedRectangle(cornerRadius: Theme.radius + 2).strokeBorder(Tokens.border.color, lineWidth: 1))
     }
 }

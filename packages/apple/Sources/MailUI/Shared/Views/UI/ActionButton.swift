@@ -40,7 +40,7 @@ struct ActionButton: View {
         switch variant {
         case .primary: Tokens.primaryForeground.color
         case .outline: Tokens.primary.color
-        case .ghost: Tokens.secondaryForeground.color
+        case .ghost: Tokens.mutedForeground.color
         case .destructive: Tokens.destructive.color
         }
     }
@@ -62,7 +62,7 @@ struct ActionButton: View {
 struct IconButton: View {
     let symbol: Symbol
     var help: String
-    var tint: Color = Tokens.secondaryForeground.color
+    var tint: Color = Tokens.mutedForeground.color
     var circled = true
     let action: () -> Void
 

@@ -65,12 +65,12 @@ struct ShortcutsView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(title.uppercased())
                                 .font(.ui(10.5, .semibold))
-                                .foregroundStyle(Tokens.mutedForeground.color)
+                                .foregroundStyle(Tokens.mutedMoreForeground.color)
                             ForEach(keys, id: \.0) { name, key in
                                 HStack {
                                     Text(name).font(.ui(13)).foregroundStyle(Tokens.foreground.color)
                                     Spacer()
-                                    Text(key).font(.system(size: 12 * Platform.scale, design: .monospaced)).foregroundStyle(Tokens.secondaryForeground.color)
+                                    Text(key).font(.system(size: 12 * Platform.scale, design: .monospaced)).foregroundStyle(Tokens.mutedForeground.color)
                                 }
                             }
                         }

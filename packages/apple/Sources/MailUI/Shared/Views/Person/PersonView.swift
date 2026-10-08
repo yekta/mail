@@ -16,12 +16,12 @@ struct PersonView: View {
                 Avatar(initials: person?.initials ?? String(email.prefix(1)).uppercased(), email: email, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name).font(.ui(17, .semibold)).foregroundStyle(Tokens.foreground.color)
-                    Text(email).font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color).textSelection(.enabled)
+                    Text(email).font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color).textSelection(.enabled)
                 }
                 ActionButton(title: "New message", symbol: .squarePen, variant: .outline, action: write)
                 if let threads = person?.threads, !threads.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("RECENT").font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedForeground.color).padding(.bottom, 6)
+                        Text("RECENT").font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedMoreForeground.color).padding(.bottom, 6)
                         ForEach(threads) { row in
                             ChoiceRow(title: row.subject.isEmpty ? "(no subject)" : row.subject, detail: row.date) { openThread?(row.id) }
                                 .disabled(openThread == nil)

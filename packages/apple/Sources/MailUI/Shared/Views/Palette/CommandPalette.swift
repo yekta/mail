@@ -40,7 +40,7 @@ struct CommandPalette: View {
                         if found.isEmpty {
                             Text("Nothing by that name.")
                                 .font(.ui(13))
-                                .foregroundStyle(Tokens.mutedForeground.color)
+                                .foregroundStyle(Tokens.mutedMoreForeground.color)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
                         }

@@ -16,7 +16,18 @@ use uuid::Uuid;
 
 pub const SIGN_IN_LIFETIME: Duration = Duration::minutes(10);
 pub const LINK_TICKET_LIFETIME: Duration = Duration::minutes(10);
-const ACCOUNT_COLORS: [&str; 5] = ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5"];
+const ACCOUNT_COLORS: [&str; 10] = [
+    "account-1",
+    "account-2",
+    "account-3",
+    "account-4",
+    "account-5",
+    "account-6",
+    "account-7",
+    "account-8",
+    "account-9",
+    "account-10",
+];
 
 pub struct UserTx {
     pub tx: Transaction<'static, Postgres>,
