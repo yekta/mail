@@ -87,7 +87,8 @@ struct SettingsView: View {
 }
 
 #if os(macOS)
-/// The version this is, the update as it goes, and the restart once one is in.
+/// The version this is, the offer of a new one, the update as it goes, and the restart once one
+/// is in.
 private struct UpdateSettings: View {
     @Environment(MailStore.self) private var store
 
@@ -95,6 +96,7 @@ private struct UpdateSettings: View {
         let updater = store.updater
         ItemRow(title: "Wonnet \(updater.current)", detail: status) {
             switch updater.state {
+            case .available: ActionButton(title: "Update", variant: .primary) { updater.install() }
             case .ready: ActionButton(title: "Restart", variant: .primary) { updater.relaunch() }
             case .failed: ActionButton(title: "Try again", symbol: .refreshCw) { updater.retry() }
             default: ActionButton(title: "Check for updates", symbol: .refreshCw, pending: updater.state == .checking) { updater.check(asked: true) }
@@ -106,6 +108,7 @@ private struct UpdateSettings: View {
         switch store.updater.state {
         case .idle, .checking: nil
         case .upToDate: "Up to date."
+        case .available(let version): "Wonnet \(version) is available."
         case .downloading(let version, let fraction): "Downloading \(version)… \(Int(fraction * 100))%"
         case .installing(let version): "Installing \(version)…"
         case .ready(let version): "Wonnet \(version) is installed. Restart to use it."

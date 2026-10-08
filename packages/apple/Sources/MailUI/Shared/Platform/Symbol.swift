@@ -21,6 +21,7 @@ enum Symbol: String {
     case chevronRight = "\u{e06f}"
     case chevronUp = "\u{e070}"
     case circleAlert = "\u{e077}"
+    case circleArrowDown = "\u{e078}"
     case circleCheck = "\u{e226}"
     case clock = "\u{e087}"
     case command = "\u{e09a}"

@@ -4,9 +4,9 @@ import Foundation
 import Observation
 import Security
 
-/// Keeps the Mac app current on its own: it looks for a new release now and then, downloads it,
-/// checks that it is signed by whoever signed this copy, puts it in this copy's place and offers
-/// a restart. Nothing is asked of the user until the restart.
+/// Finds out about new releases and replaces this copy with one: it looks now and then, offers
+/// the update, downloads it, checks that it is signed by whoever signed this copy, puts it in
+/// this copy's place and offers the restart.
 @Observable
 final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     enum State: Equatable {
@@ -14,6 +14,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         /// The user asked and the answer isn't here yet.
         case checking
         case upToDate
+        case available(String)
         case downloading(String, Double)
         case installing(String)
         /// Installed; the running app is still the old one.
@@ -79,7 +80,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
             }
             return
         }
-        install(version)
+        state = .available(version)
     }
 
     /// Why this copy can't replace itself, if it can't.
@@ -93,7 +94,12 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         return nil
     }
 
-    private func install(_ version: String) {
+    func install() {
+        guard case .available(let version) = state else { return }
+        if let obstacle {
+            state = .failed(obstacle)
+            return
+        }
         guard let url = URL(string: "\(Self.releases)/download/v\(version)/Wonnet.zip") else { return }
         downloadingVersion = version
         state = .downloading(version, 0)

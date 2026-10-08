@@ -63,10 +63,21 @@ struct SidebarView: View {
         }
     }
 
+    /// A new version of the Mac app as it comes in, then settings.
     private var footer: some View {
-        NavRow(title: "Settings", symbol: .settings, action: showSettings) {
-            if store.connection == "offline" {
-                Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
+        VStack(spacing: 0) {
+            #if os(macOS)
+            if store.updater.state != .idle {
+                UpdateRow(updater: store.updater)
+                    .padding(.leading, 18)
+                    .padding(.trailing, Space.l)
+                    .padding(.vertical, Space.s)
+            }
+            #endif
+            NavRow(title: "Settings", symbol: .settings, action: showSettings) {
+                if store.connection == "offline" {
+                    Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
+                }
             }
         }
         .rule(.top)
