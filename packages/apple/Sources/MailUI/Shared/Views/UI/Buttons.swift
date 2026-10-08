@@ -139,7 +139,7 @@ struct ActionButton: View {
         private var background: Color {
             switch variant {
             case .primary: hovered ? Tokens.primary.color.opacity(0.88) : Tokens.primary.color
-            case .outline, .ghost, .destructive: hovered ? Tokens.accent.color : .clear
+            case .outline, .ghost, .destructive: hovered ? Tokens.accentStronger.color : .clear
             }
         }
 
@@ -212,7 +212,7 @@ struct IconCircle: View {
     var body: some View {
         ButtonIcon(symbol: symbol, pending: pending, size: size.icon, tint: tint)
             .frame(width: size.height * Platform.scale, height: size.height * Platform.scale)
-            .background(Circle().fill(hovered ? Tokens.accent.color : .clear))
+            .background(Circle().fill(hovered ? Tokens.accentStronger.color : .clear))
             .overlay(Circle().strokeBorder(circled ? Tokens.border.color : .clear, lineWidth: Theme.hairline))
             .contentShape(Circle())
     }
@@ -226,14 +226,15 @@ struct IconCircle: View {
 
 /// A button that is only its content: a star, a sender's name, a word in a toast. For what no
 /// other button fits; it still hovers, presses and disables as they do, and is never under
-/// the smallest control in height.
+/// the smallest control in height. `tint` is the colour it hovers in, as a wash of it.
 struct PlainButton<Label: View>: View {
     var help: String?
+    var tint: ThemeColor?
     let action: () -> Void
     @ViewBuilder let label: Label
 
     @ViewBuilder var body: some View {
-        let button = Button(action: action) { Face(label: label) }.buttonStyle(.press)
+        let button = Button(action: action) { Face(label: label, tint: tint) }.buttonStyle(.press)
         if let help {
             button.help(help).accessibilityLabel(help)
         } else {
@@ -243,14 +244,44 @@ struct PlainButton<Label: View>: View {
 
     private struct Face: View {
         let label: Label
+        let tint: ThemeColor?
         @Environment(\.hovered) private var hovered
 
         var body: some View {
             label
                 .padding(.horizontal, Space.xs)
                 .frame(minWidth: ControlSize.small.height, minHeight: ControlSize.small.height)
-                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(hovered ? Tokens.accent.color : .clear))
+                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(hovered ? fill : .clear))
                 .contentShape(Rectangle())
+        }
+
+        private var fill: Color {
+            guard let tint else { return Tokens.accentStronger.color }
+            return tint.opacity(Tokens.colorTintOpacity).color
+        }
+    }
+}
+
+/// A thread's star: lit in the star colour when starred, and on hover, over a wash of it.
+struct StarButton: View {
+    let starred: Bool
+    var size: CGFloat = 20
+    let action: () -> Void
+
+    var body: some View {
+        PlainButton(help: starred ? "Unstar" : "Star", tint: Tokens.star, action: action) {
+            Face(starred: starred, size: size)
+        }
+    }
+
+    private struct Face: View {
+        let starred: Bool
+        let size: CGFloat
+        @Environment(\.hovered) private var hovered
+
+        var body: some View {
+            Image(starred ? .starFilled : .star, size: size)
+                .foregroundStyle(starred || hovered ? Tokens.star.color : Tokens.mutedMoreForeground.color)
         }
     }
 }

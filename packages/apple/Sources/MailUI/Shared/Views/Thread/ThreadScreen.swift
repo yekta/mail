@@ -140,10 +140,7 @@ struct ThreadScreen: View {
                     Text(conversation.participants).textStyle(.label, color: Tokens.mutedMoreForeground.color)
                 }
                 Spacer(minLength: 0)
-                PlainButton(help: conversation.starred ? "Unstar" : "Star", action: { store.toggleStar(conversation.id) }) {
-                    Image(conversation.starred ? .starFilled : .star, size: 20)
-                        .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedMoreForeground.color)
-                }
+                StarButton(starred: conversation.starred) { store.toggleStar(conversation.id) }
             }
             if !conversation.labels.isEmpty || conversation.muted || conversation.unsubscribe {
                 HStack(alignment: .center, spacing: Space.m) {

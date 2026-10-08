@@ -237,6 +237,7 @@ final class HoverTableView: NSTableView {
             return
         }
         hovered = index
+        view.hoveredHit = view.hit(convert(point, to: view))
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -254,7 +255,15 @@ final class ThreadRowView: NSTableRowView {
     private var text: RowText?
     var isCurrent = false { didSet { if isCurrent != oldValue { needsDisplay = true } } }
     var isChecked = false { didSet { if isChecked != oldValue { needsDisplay = true } } }
-    var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }
+    var hovering = false {
+        didSet {
+            guard hovering != oldValue else { return }
+            if !hovering { hoveredHit = .none }
+            needsDisplay = true
+        }
+    }
+    /// The action or the star the pointer is over, lit as a button would be.
+    var hoveredHit = Hit.none { didSet { if hoveredHit != oldValue { needsDisplay = true } } }
 
     private static let sendersX: CGFloat = 36
     private static let sendersWidth: CGFloat = 190
@@ -304,7 +313,7 @@ final class ThreadRowView: NSTableRowView {
         fill.setFill()
         column.fill()
         if isChecked {
-            Tokens.primary.platform.withAlphaComponent(0.1).setFill()
+            Tokens.primary.opacity(Tokens.colorTintOpacity).platform.setFill()
             column.fill()
         }
         Tokens.border.platform.setFill()
@@ -337,8 +346,10 @@ final class ThreadRowView: NSTableRowView {
         let trailing: CGFloat
         if hovering {
             trailing = (actions.last?.2.minX ?? starRect.minX) - 16
-            for (_, symbol, rect) in actions {
-                Self.drawSymbol(symbol, in: rect, color: Tokens.mutedForeground.platform)
+            for (kind, symbol, rect) in actions {
+                let lit = hoveredHit == kind
+                if lit { Self.drawHover(around: rect, color: Tokens.accentStronger.platform) }
+                Self.drawSymbol(symbol, in: rect, color: lit ? Tokens.foreground.platform : Tokens.mutedForeground.platform)
             }
         } else {
             let dateWidth = ceil(text.date.size().width)
@@ -347,8 +358,17 @@ final class ThreadRowView: NSTableRowView {
         }
         Self.drawLine(text.line, x: x, width: max(trailing - x, 0), middle: middle)
         guard row.draftId == nil else { return }
-        let starColor = row.starred ? Tokens.star.platform : Tokens.input.platform
+        let starLit = hoveredHit == .star
+        if starLit { Self.drawHover(around: starRect, color: Tokens.star.opacity(Tokens.colorTintOpacity).platform) }
+        let starColor = row.starred || starLit ? Tokens.star.platform : Tokens.input.platform
         Self.drawSymbol(row.starred ? .starFilled : .star, in: starRect, color: starColor)
+    }
+
+    /// The circle a hovered icon sits on, as tall as the smallest control.
+    private static func drawHover(around rect: NSRect, color: NSColor) {
+        let inset = (rect.width - ControlSize.small.height) / 2
+        color.setFill()
+        NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset)).fill()
     }
 
     private static func drawLine(_ text: NSAttributedString, x: CGFloat, width: CGFloat, middle: CGFloat) {
