@@ -60,7 +60,7 @@ added to the component, not to the view.
 | `ChoiceRow`, `ChoiceList` | One choice under a field, and the list that scrolls to the highlighted one |
 | `PopupCard` | A card over the page for suggestions |
 | `TabStrip` | Tabs on a line with counts |
-| `PillTabs` | Pills on a line with an icon and a count, the chosen one filled; dragged to reorder, with a menu on each |
+| `PillTabs` | Tabs on a line with an icon and a count, the chosen one filled in a rounded rectangle; dragged to reorder, with a menu on each |
 | `SectionHeading`, `FormSection` | A section's name in capitals, with its controls |
 | `Card`, `FormButtons` | A rounded card, and Save and Cancel under a form |
 | `Notice` | A line about something, muted or in error tone, with an optional action |

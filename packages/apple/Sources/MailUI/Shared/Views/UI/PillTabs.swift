@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Pills on a line, each with an icon, a name and a count; the chosen one filled. With `reorder`,
+/// Tabs on a line, each with an icon, a name and a count; the chosen one filled. With `reorder`,
 /// dragging a pill (on iOS, after holding it) moves it, and the new order is given when it is let
 /// go. `menu` is what a secondary click on a pill offers.
 struct PillTabs<Tab: Identifiable & Hashable, Menu: View>: View where Tab.ID == String {
@@ -63,7 +63,7 @@ struct PillTabs<Tab: Identifiable & Hashable, Menu: View>: View where Tab.ID == 
             }
             .padding(.horizontal, Space.m * Platform.scale)
             .frame(height: ControlSize.regular.height * Platform.scale)
-            .background(Capsule().fill(chosen ? Tokens.accent.color : hovered ? Tokens.accentStronger.color : .clear))
+            .background(RoundedRectangle(cornerRadius: Theme.radius + 4).fill(chosen ? Tokens.accent.color : hovered ? Tokens.accentStronger.color : .clear))
             .padding(.horizontal, 1)
             .contentShape(Rectangle())
         }
