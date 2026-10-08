@@ -12,25 +12,26 @@ struct PersonView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Space.l) {
                 Avatar(initials: person?.initials ?? String(email.prefix(1)).uppercased(), email: email, size: 52)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(name).font(.ui(17, .semibold)).foregroundStyle(Tokens.foreground.color)
-                    Text(email).font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color).textSelection(.enabled)
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Text(name).textStyle(.heading)
+                    Text(email).textStyle(.label, color: Tokens.mutedMoreForeground.color).textSelection(.enabled)
                 }
                 ActionButton(title: "New message", symbol: .squarePen, variant: .outline, action: write)
                 if let threads = person?.threads, !threads.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("RECENT").font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedMoreForeground.color).padding(.bottom, 6)
-                        ForEach(threads) { row in
-                            ChoiceRow(title: row.subject.isEmpty ? "(no subject)" : row.subject, detail: row.date) { openThread?(row.id) }
-                                .disabled(openThread == nil)
+                    FormSection(title: "Recent") {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(threads) { row in
+                                ChoiceRow(title: row.subject.isEmpty ? "(no subject)" : row.subject, detail: row.date) { openThread?(row.id) }
+                                    .disabled(openThread == nil)
+                            }
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, Space.s)
                 }
             }
-            .padding(20)
+            .padding(Space.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Tokens.card.color)

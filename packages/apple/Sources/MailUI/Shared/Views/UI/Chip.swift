@@ -15,11 +15,12 @@ struct Chip: View {
     var help: String?
     var remove: (() -> Void)?
     var action: (() -> Void)?
+    @Environment(\.hovered) private var hovered
 
     var body: some View {
         if let action, remove == nil {
             Button(action: action) { content }
-                .buttonStyle(.plain)
+                .buttonStyle(.press)
                 .help(help ?? title)
         } else {
             content.help(help ?? title)
@@ -27,28 +28,24 @@ struct Chip: View {
     }
 
     private var content: some View {
-        HStack(spacing: 6) {
-            if pending {
-                ProgressView().controlSize(.mini)
-            } else if let symbol {
-                Image(symbol, size: 12)
-            }
-            Text(title).font(.ui(12)).lineLimit(1).truncationMode(.middle)
+        HStack(spacing: Space.xs + 2) {
+            ButtonIcon(symbol: symbol, pending: pending, size: 12, tint: variant == .invalid ? Tokens.destructive.color : Tokens.mutedForeground.color)
+            Text(title).font(.ui(.caption)).lineLimit(1).truncationMode(.middle)
             if let detail {
-                Text(detail).font(.ui(11)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
+                Text(detail).textStyle(.footnote).lineLimit(1)
             }
             if let remove {
-                Button(action: remove) { Image(.x, size: 11) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Tokens.mutedMoreForeground.color)
-                    .accessibilityLabel("Remove \(title)")
+                PlainButton(help: "Remove \(title)", action: remove) {
+                    Image(.x, size: 11).foregroundStyle(Tokens.mutedMoreForeground.color)
+                }
+                .padding(.trailing, -Space.s)
             }
         }
-        .padding(.horizontal, 10)
-        .frame(height: 24 * Platform.scale)
+        .padding(.horizontal, Space.s + 2)
+        .frame(height: Theme.chipHeight * Platform.scale)
         .foregroundStyle(variant == .invalid ? Tokens.destructive.color : Tokens.foreground.color)
-        .background(Capsule().fill(Tokens.muted.color))
-        .overlay(Capsule().strokeBorder(variant == .invalid ? Tokens.destructive.color.opacity(0.6) : .clear, lineWidth: 1))
+        .background(Capsule().fill(hovered && action != nil ? Tokens.accent.color : Tokens.muted.color))
+        .overlay(Capsule().strokeBorder(variant == .invalid ? Tokens.destructive.color.opacity(0.6) : .clear, lineWidth: Theme.hairline))
         .contentShape(Capsule())
     }
 }

@@ -9,86 +9,61 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var store = store
-        ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                HStack {
-                    Text("Settings").font(.ui(20, .semibold))
-                    Spacer()
-                    IconButton(symbol: .x, help: "Close", circled: false) { dismiss() }
-                }
-                SettingsSection(title: "Accounts") {
-                    ForEach(store.accounts) { account in
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.accountColor(account.color).color).frame(width: 8, height: 8)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(account.address).font(.ui(14))
-                                Text(status(account)).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
+        Sheet(title: "Settings", size: .large, background: Tokens.background) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xxl) {
+                    FormSection(title: "Accounts") {
+                        ForEach(store.accounts) { account in
+                            ItemRow(title: account.address, detail: status(account), dot: Theme.accountColor(account.color).color) {
+                                ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
                             }
-                            Spacer()
-                            ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
+                        }
+                        if adding {
+                            Card { AddAccountForm() }
+                        } else {
+                            ActionButton(title: "Add account", symbol: .plus, variant: .outline) { adding = true }
                         }
                     }
-                    if adding {
-                        AddAccountForm().padding(.top, 8)
-                    } else {
-                        ActionButton(title: "Add account", symbol: .plus, variant: .outline) { adding = true }
+                    if store.preferencesLoaded {
+                        FormSection(title: "Signatures", detail: "Put under what you write from each account.") { SignatureSettings() }
+                        FormSection(title: "Snippets", detail: "Type ; and a name while writing to put one in, or press ⌘;. {first_name} becomes the first recipient's first name.") {
+                            SnippetSettings()
+                        }
+                        FormSection(title: "Split Inbox") { SplitSettings() }
+                        FormSection(title: "Blocked senders", detail: "Their new mail goes to the trash.") { BlockedSettings() }
+                        FormSection(title: "Images") { ImageSettings() }
+                        FormSection(title: "Notifications") { NotificationSettings() }
+                    }
+                    FormSection(title: "Appearance") {
+                        Segmented(options: Appearance.allCases, selection: $store.appearance, title: \.name)
+                        DarkMailSettings()
+                    }
+                    FormSection(title: "Undo send") {
+                        Segmented(options: [0, 5, 10, 20, 30], selection: $store.undoDelay) { $0 == 0 ? "Off" : "\($0) s" }
+                    }
+                    FormSection(title: "Server") {
+                        Text(store.server).textStyle(.label, color: Tokens.mutedForeground.color).textSelection(.enabled)
+                        Notice(text: connectionText)
+                    }
+                    #if os(macOS)
+                    FormSection(title: "Updates", detail: "New versions are downloaded and installed on their own; a restart finishes them.") {
+                        UpdateSettings()
+                    }
+                    #else
+                    FormSection(title: "Version") {
+                        Text("Wonnet \(Platform.version)").textStyle(.label, color: Tokens.mutedForeground.color)
+                    }
+                    #endif
+                    ActionButton(title: "Sign out", symbol: .logOut, variant: .destructive) {
+                        store.signOut()
+                        dismiss()
                     }
                 }
-                if store.preferencesLoaded {
-                    SettingsSection(title: "Signatures", detail: "Put under what you write from each account.") { SignatureSettings() }
-                    SettingsSection(title: "Snippets", detail: "Type ; and a name while writing to put one in, or press ⌘;. {first_name} becomes the first recipient's first name.") {
-                        SnippetSettings()
-                    }
-                    SettingsSection(title: "Split Inbox") { SplitSettings() }
-                    SettingsSection(title: "Blocked senders", detail: "Their new mail goes to the trash.") { BlockedSettings() }
-                    SettingsSection(title: "Images") { ImageSettings() }
-                    SettingsSection(title: "Notifications") { NotificationSettings() }
-                }
-                SettingsSection(title: "Appearance") {
-                    Picker("", selection: $store.appearance) {
-                        ForEach(Appearance.allCases) { appearance in Text(appearance.name).tag(appearance) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    DarkMailSettings()
-                }
-                SettingsSection(title: "Undo send") {
-                    Picker("", selection: $store.undoDelay) {
-                        Text("Off").tag(0)
-                        ForEach([5, 10, 20, 30], id: \.self) { seconds in Text("\(seconds) s").tag(seconds) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                }
-                SettingsSection(title: "Server") {
-                    Text(store.server).font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color).textSelection(.enabled)
-                    Text(connectionText).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                }
-                #if os(macOS)
-                SettingsSection(title: "Updates", detail: "New versions are downloaded and installed on their own; a restart finishes them.") {
-                    UpdateSettings()
-                }
-                #else
-                SettingsSection(title: "Version") {
-                    Text("Wonnet \(Platform.version)").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
-                }
-                #endif
-                ActionButton(title: "Sign out", symbol: .logOut, variant: .destructive) {
-                    store.signOut()
-                    dismiss()
-                }
+                .padding(Space.xxl)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundStyle(Tokens.foreground.color)
-            .padding(28)
-            .frame(maxWidth: 560, alignment: .leading)
         }
-        .background(Tokens.background.color)
         .task { await store.loadPreferences() }
-        #if os(macOS)
-        .frame(width: 560, height: 620)
-        #endif
     }
 
     private var connectionText: String {
@@ -116,17 +91,12 @@ private struct UpdateSettings: View {
 
     var body: some View {
         let updater = store.updater
-        HStack(spacing: 12) {
-            Text("Wonnet \(updater.current)").font(.ui(13)).foregroundStyle(Tokens.mutedForeground.color)
-            Spacer()
+        ItemRow(title: "Wonnet \(updater.current)", detail: status) {
             switch updater.state {
             case .ready: ActionButton(title: "Restart", variant: .primary) { updater.relaunch() }
             case .failed: ActionButton(title: "Try again", symbol: .refreshCw) { updater.retry() }
             default: ActionButton(title: "Check for updates", symbol: .refreshCw, pending: updater.state == .checking) { updater.check(asked: true) }
             }
-        }
-        if let status {
-            Text(status).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -142,22 +112,3 @@ private struct UpdateSettings: View {
     }
 }
 #endif
-
-/// A part of the settings: a small heading, maybe a line about it, and its controls.
-struct SettingsSection<Content: View>: View {
-    let title: String
-    var detail: String?
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title.uppercased()).font(.ui(11, .semibold)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                if let detail {
-                    Text(detail).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            content
-        }
-    }
-}

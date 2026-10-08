@@ -6,21 +6,19 @@ struct ToastView: View {
 
     var body: some View {
         if let toast = store.toast {
-            HStack(spacing: 16) {
-                Text(toast.message).font(.ui(13))
+            HStack(spacing: Space.l) {
+                Text(toast.message).textStyle(.label, color: Tokens.popoverForeground.color)
                 if let action = toast.action {
-                    Button(action: store.toastTapped) {
-                        Text(action).font(.ui(13, .semibold)).foregroundStyle(Tokens.primary.color)
+                    PlainButton(action: store.toastTapped) {
+                        Text(action).textStyle(.labelStrong, color: Tokens.primary.color)
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 40 * Platform.scale)
-            .foregroundStyle(Tokens.popoverForeground.color)
-            .background(Capsule().fill(Tokens.popover.color).shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 12, y: 4))
-            .overlay(Capsule().strokeBorder(Tokens.border.color, lineWidth: 1))
-            .padding(.bottom, 20)
+            .padding(.horizontal, Space.l + 2)
+            .frame(height: Theme.searchHeight * Platform.scale)
+                        .background(Capsule().fill(Tokens.popover.color).shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 12, y: 4))
+            .overlay(Capsule().strokeBorder(Tokens.border.color, lineWidth: Theme.hairline))
+            .padding(.bottom, Space.xl)
             .task(id: toast.id) {
                 try? await Task.sleep(for: .seconds(toast.duration))
                 store.dismissToast(toast)

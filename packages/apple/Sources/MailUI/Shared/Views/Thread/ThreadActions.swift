@@ -84,7 +84,7 @@ struct ThreadActions: View {
     let thread: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             ForEach([ThreadCommand.archive, .trash, .snooze, .label, .read]) { command in
                 IconButton(symbol: command.symbol, help: help(command)) { store.run(command, on: [thread]) }
             }

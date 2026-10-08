@@ -6,20 +6,20 @@ struct OnboardingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
-                VStack(spacing: 10) {
+            VStack(spacing: Space.xxl) {
+                VStack(spacing: Space.s + 2) {
                     Image(.send, size: 34)
                         .foregroundStyle(Tokens.primaryForeground.color)
                         .frame(width: 72 * Platform.scale, height: 72 * Platform.scale)
                         .background(Circle().fill(Tokens.primary.color))
-                    Text("Mail").font(.ui(28, .semibold)).foregroundStyle(Tokens.foreground.color)
-                    Text("All your email, calm and fast.").font(.ui(14)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                    Text("Mail").textStyle(.display)
+                    Text("All your email, calm and fast.").textStyle(.body, color: Tokens.mutedMoreForeground.color)
                 }
                 .padding(.top, 48)
                 AddAccountForm()
             }
             .frame(maxWidth: 360)
-            .padding(24)
+            .padding(Space.xl)
             .frame(maxWidth: .infinity)
         }
         .background(Tokens.background.color)
@@ -35,41 +35,34 @@ struct AddAccountForm: View {
     @State private var server = ""
     @State private var adding = false
     @State private var error: String?
-    @State private var advanced = false
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: Space.l + 2) {
             ActionButton(title: "Continue with Google", symbol: .mail, variant: .primary, wide: true, action: store.signInWithGoogle)
-            HStack(spacing: 10) {
-                rule
-                Text("or a JMAP server").font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).fixedSize()
-                rule
+            HStack(spacing: Space.s + 2) {
+                Rule()
+                Text("or a JMAP server").textStyle(.caption).fixedSize()
+                Rule()
             }
-            VStack(spacing: 12) {
+            VStack(spacing: Space.m) {
                 InputField(label: "Server", text: $url, placeholder: "https://api.fastmail.com")
                 InputField(label: "Email", text: $email, placeholder: "you@example.com")
                 InputField(label: "Password", text: $password, placeholder: "App password", secure: true)
             }
             if let error {
-                Text(error).font(.ui(12)).foregroundStyle(Tokens.destructive.color).frame(maxWidth: .infinity, alignment: .leading)
+                Notice(text: error, tone: .error)
             }
             ActionButton(title: "Add account", variant: .outline, pending: adding, wide: true, action: addJmap)
                 .disabled(url.isEmpty || email.isEmpty || password.isEmpty)
-            DisclosureGroup("Advanced", isExpanded: $advanced) {
-                VStack(spacing: 10) {
+            Disclosure(title: "Advanced") {
+                VStack(spacing: Space.s + 2) {
                     InputField(label: "Mail server for this app", text: $server, placeholder: "https://mail.example.com")
                     ActionButton(title: "Use this server", variant: .ghost, action: saveServer)
                 }
-                .padding(.top, 10)
             }
-            .font(.ui(12))
-            .foregroundStyle(Tokens.mutedMoreForeground.color)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear { server = store.server }
-    }
-
-    private var rule: some View {
-        Rectangle().fill(Tokens.border.color).frame(height: 1)
     }
 
     private func addJmap() {

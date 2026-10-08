@@ -95,6 +95,8 @@ public final class MailStore {
     /// What the command palette shows, while it is open.
     var palette: PaletteScope?
     var shortcutsOpen = false
+    /// The sheet that shows every component, for working on the design.
+    var galleryOpen = false
     var settingsOpen = false
     /// A question to answer before something that can't be taken back.
     var confirmation: Confirmation?
@@ -166,7 +168,7 @@ public final class MailStore {
 
     /// Whether a sheet, the palette or a question is up, when the window's keys don't apply.
     var sheetOpen: Bool {
-        compose != nil || snoozing != nil || labeling != nil || palette != nil || shortcutsOpen || settingsOpen || confirmation != nil
+        compose != nil || snoozing != nil || labeling != nil || palette != nil || shortcutsOpen || settingsOpen || galleryOpen || confirmation != nil
     }
 
     // MARK: Starting

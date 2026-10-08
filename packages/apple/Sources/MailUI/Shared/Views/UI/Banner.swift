@@ -9,15 +9,15 @@ struct Banner: View {
     let perform: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.s + 2) {
             Image(symbol, size: 14).foregroundStyle(Tokens.mutedForeground.color)
-            Text(text).font(.ui(13)).foregroundStyle(Tokens.accentForeground.color).lineLimit(1)
+            Text(text).textStyle(.label, color: Tokens.accentForeground.color).lineLimit(1)
             Spacer()
             ActionButton(title: action, variant: .primary, action: perform)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Space.xl)
         .frame(height: 44 * Platform.scale)
         .background(Tokens.accent.color)
-        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.border.color).frame(height: 1) }
+        .rule(.bottom)
     }
 }

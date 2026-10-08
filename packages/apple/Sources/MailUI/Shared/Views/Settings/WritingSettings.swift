@@ -5,7 +5,7 @@ struct SignatureSettings: View {
     @Environment(MailStore.self) private var store
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.l) {
             ForEach(store.accounts) { account in SignatureEditor(account: account) }
         }
     }
@@ -25,11 +25,10 @@ private struct SignatureEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             InputField(label: account.address, text: Binding(get: { text }, set: { text = $0; edited = true }), placeholder: provided ?? "No signature", lines: 4)
             if provided != nil, text.isEmpty {
-                Text("The signature kept by \(account.provider == "gmail" ? "Gmail" : "your provider") is used.")
-                    .font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                Notice(text: "The signature kept by \(account.provider == "gmail" ? "Gmail" : "your provider") is used.")
             }
         }
         .onAppear {
@@ -60,18 +59,12 @@ struct SnippetSettings: View {
 
     var body: some View {
         let snippets = Snippet.all(in: store.preferences)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.s + 2) {
             ForEach(snippets) { snippet in
                 if editing?.id == snippet.id {
                     SnippetForm(snippet: snippet) { editing = nil }
                 } else {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(snippet.name).font(.ui(14))
-                            Text(snippet.text.replacingOccurrences(of: "\n", with: " "))
-                                .font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color).lineLimit(1)
-                        }
-                        Spacer()
+                    ItemRow(title: snippet.name, detail: snippet.text.replacingOccurrences(of: "\n", with: " ")) {
                         IconButton(symbol: .pencil, help: "Edit") { editing = snippet }
                         IconButton(symbol: .trash, help: "Remove") { store.setPreference(snippet.key, nil) }
                     }
@@ -94,20 +87,18 @@ private struct SnippetForm: View {
     let done: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            InputField(label: "Name", text: $snippet.name, placeholder: "thanks", autofocus: snippet.name.isEmpty)
-            InputField(label: "Text", text: $snippet.text, placeholder: "Thanks {first_name}!", lines: 4)
-            HStack(spacing: 8) {
-                ActionButton(title: "Save", variant: .primary) {
-                    snippet.name = snippet.name.trimmingCharacters(in: .whitespaces)
-                    store.setPreference(snippet.key, snippet.value)
-                    done()
-                }
-                .disabled(snippet.name.trimmingCharacters(in: .whitespaces).isEmpty)
-                ActionButton(title: "Cancel", variant: .ghost, action: done)
+        Card {
+            VStack(alignment: .leading, spacing: Space.m) {
+                InputField(label: "Name", text: $snippet.name, placeholder: "thanks", autofocus: snippet.name.isEmpty)
+                InputField(label: "Text", text: $snippet.text, placeholder: "Thanks {first_name}!", lines: 4)
+                FormButtons(saveDisabled: snippet.name.trimmingCharacters(in: .whitespaces).isEmpty, onSave: save, onCancel: done)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Tokens.card.color))
+    }
+
+    private func save() {
+        snippet.name = snippet.name.trimmingCharacters(in: .whitespaces)
+        store.setPreference(snippet.key, snippet.value)
+        done()
     }
 }

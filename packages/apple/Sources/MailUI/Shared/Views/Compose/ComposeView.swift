@@ -16,8 +16,7 @@ struct ComposeView: View {
     @State private var edited = false
     @State private var closing = false
     @State private var showQuote = false
-    @State private var choosingFrom = false
-    @State private var importing = false
+        @State private var importing = false
     @State private var timing: Timing?
     @State private var pickingSnippet = false
     /// The word after a `;` at the caret, while there is one.
@@ -31,13 +30,13 @@ struct ComposeView: View {
     @State private var bodyHeight: CGFloat = 160
     @State private var editing = BodyEditing()
 
-    private enum Timing: String, Identifiable {
+    fileprivate enum Timing: String, Identifiable {
         case sendLater, remind
         var id: String { rawValue }
     }
 
     /// Something to confirm before sending.
-    private struct Warning: Identifiable {
+    fileprivate struct Warning: Identifiable {
         let id = UUID()
         let message: String
         let at: Date?
@@ -63,14 +62,33 @@ struct ComposeView: View {
     }
 
     var body: some View {
+        #if os(macOS)
         VStack(spacing: 0) {
-            header
-            rule
+            HeaderBar(title: title) {
+                IconButton(symbol: .arrowLeft, help: "Back (Esc)", action: close)
+                    .keyboardShortcut(.cancelAction)
+            } trailing: {
+                actions
+            }
+            Rule()
+            page
+        }
+        .modifier(behaviour)
+        #else
+        Sheet(title: title, size: .large, close: "Cancel", background: Tokens.card) {
+            page.modifier(behaviour)
+        } trailing: {
+            actions
+        }
+        #endif
+    }
+
+    private var page: some View {
+        VStack(spacing: 0) {
             if let notice {
-                Text(notice).font(.ui(12)).foregroundStyle(Tokens.destructive.color)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                Notice(text: notice, tone: .error)
+                    .padding(.horizontal, Space.l)
+                    .padding(.vertical, Space.s)
             }
             ScrollView {
                 VStack(spacing: 0) {
@@ -80,8 +98,8 @@ struct ComposeView: View {
                 #if os(macOS)
                 .frame(maxWidth: Theme.cardWidth)
                 .background(Tokens.card.color)
-                .padding(.top, 16)
-                .padding(.horizontal, 24)
+                .padding(.top, Space.l)
+                .padding(.horizontal, Space.xl + 4)
                 .frame(maxWidth: .infinity)
                 #endif
             }
@@ -89,84 +107,90 @@ struct ComposeView: View {
             #if os(macOS)
             .background(Tokens.background.color)
             #endif
-            rule
+            Rule()
             toolbar
         }
         .background(Tokens.card.color)
-        .overlay(alignment: .bottomLeading) { snippetMenu }
-        .overlay {
-            if dropping {
-                RoundedRectangle(cornerRadius: Theme.radius)
-                    .strokeBorder(Tokens.primary.color, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                    .padding(6)
-                    .allowsHitTesting(false)
-            }
-        }
-        .background { shortcuts }
-        .onDrop(of: [.item], isTargeted: $dropping) { providers in
-            Task { add(await Outgoing.stage(providers)) }
-            return true
-        }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result else { return }
-            Task { add(await Outgoing.stage(urls.map(Incoming.file))) }
-        }
-        .sheet(item: $timing) { timing in
-            TimePicker(title: timing == .sendLater ? "Send later" : "Remind me if nobody replies", pick: { choice in picked(choice, for: timing) }, cancel: { self.timing = nil })
-                .environment(store)
-        }
-        .sheet(isPresented: $pickingSnippet) {
-            SnippetPicker(snippets: Snippet.all(in: store.preferences), pick: { snippet in
-                pickingSnippet = false
-                put(snippet, replacingTrigger: false)
-            }, cancel: { pickingSnippet = false })
-        }
-        .alert("Send anyway?", isPresented: Binding(get: { warning != nil }, set: { if !$0 { warning = nil } }), presenting: warning) { warning in
-            Button("Send") { finish(at: warning.at, archive: warning.archive) }
-            Button("Keep writing", role: .cancel) {}
-        } message: { warning in
-            Text(warning.message)
-        }
-        .alert("Discard this draft?", isPresented: $discarding) {
-            Button("Discard", role: .destructive) {
-                closing = true
-                store.discardDraft(compose)
-            }
-            Button("Keep it", role: .cancel) {}
-        }
-        .task(id: live) {
-            store.noteCompose(live)
-            await autosave()
-        }
-        .task {
-            if !store.preferencesLoaded { await store.loadPreferences() }
-        }
-        .onAppear {
-            guard !compose.draft.to.isEmpty else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { editing.focus() }
-        }
-        .onDisappear {
-            // Swiped away on iOS: kept as when closed.
-            guard !closing, timing == nil, !pickingSnippet, !importing else { return }
-            store.closeCompose(assembled, keep: edited || compose.keep || compose.draftId != nil)
+    }
+
+    /// What happens around the page on both platforms: drops, the file picker, the sheets, the
+    /// questions, the autosave and the keeping of the draft when the view goes.
+    private var behaviour: some ViewModifier {
+        Behaviour(
+            dropping: $dropping, importing: $importing, timing: $timing, pickingSnippet: $pickingSnippet, warning: $warning,
+            discarding: $discarding, view: self
+        )
+    }
+
+    private struct Behaviour: ViewModifier {
+        @Binding var dropping: Bool
+        @Binding var importing: Bool
+        @Binding var timing: Timing?
+        @Binding var pickingSnippet: Bool
+        @Binding var warning: Warning?
+        @Binding var discarding: Bool
+        let view: ComposeView
+
+        func body(content: Content) -> some View {
+            content
+                .overlay(alignment: .bottomLeading) { view.snippetMenu }
+                .overlay {
+                    if dropping {
+                        RoundedRectangle(cornerRadius: Theme.radius)
+                            .strokeBorder(Tokens.primary.color, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                            .padding(Space.xs + 2)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background { view.shortcuts }
+                .onDrop(of: [.item], isTargeted: $dropping) { providers in
+                    Task { view.add(await Outgoing.stage(providers)) }
+                    return true
+                }
+                .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                    guard case .success(let urls) = result else { return }
+                    Task { view.add(await Outgoing.stage(urls.map(Incoming.file))) }
+                }
+                .sheet(item: $timing) { timing in
+                    TimePicker(title: timing == .sendLater ? "Send later" : "Remind me if nobody replies") { choice in view.picked(choice, for: timing) }
+                        .environment(view.store)
+                }
+                .sheet(isPresented: $pickingSnippet) {
+                    SnippetPicker(snippets: Snippet.all(in: view.store.preferences)) { snippet in
+                        pickingSnippet = false
+                        view.put(snippet, replacingTrigger: false)
+                    }
+                }
+                .alert("Send anyway?", isPresented: Binding(get: { warning != nil }, set: { if !$0 { warning = nil } }), presenting: warning) { warning in
+                    Button("Send") { view.finish(at: warning.at, archive: warning.archive) }
+                    Button("Keep writing", role: .cancel) {}
+                } message: { warning in
+                    Text(warning.message)
+                }
+                .alert("Discard this draft?", isPresented: $discarding) {
+                    Button("Discard", role: .destructive, action: view.discard)
+                    Button("Keep it", role: .cancel) {}
+                }
+                .task(id: view.live) {
+                    view.store.noteCompose(view.live)
+                    await view.autosave()
+                }
+                .task {
+                    if !view.store.preferencesLoaded { await view.store.loadPreferences() }
+                }
+                .onAppear {
+                    guard !view.compose.draft.to.isEmpty else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { view.editing.focus() }
+                }
+                .onDisappear(perform: view.left)
         }
     }
 
     // MARK: Parts
 
-    /// On the Mac the page's top bar, as a thread's; on iOS the sheet's header.
-    private var header: some View {
-        HStack(spacing: 10) {
-            #if os(macOS)
-            IconButton(symbol: .arrowLeft, help: "Back (Esc)", action: close)
-                .keyboardShortcut(.cancelAction)
-            #else
-            ActionButton(title: "Cancel", variant: .ghost, action: close)
-                .keyboardShortcut(.cancelAction)
-            #endif
-            Spacer()
-            Text(title).font(.ui(14, .semibold)).foregroundStyle(Tokens.foreground.color)
-            Spacer()
+    /// Send later, send and archive, and Send: at the end of the bar.
+    private var actions: some View {
+        HStack(spacing: 0) {
             IconButton(symbol: .calendarClock, help: "Send later (⌘⇧L)") { timing = .sendLater }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
             if compose.thread != nil {
@@ -177,34 +201,13 @@ struct ComposeView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(assembled.draft.to.isEmpty && assembled.draft.cc.isEmpty && assembled.draft.bcc.isEmpty)
         }
-        #if os(macOS)
-        .padding(.horizontal, 20)
-        #else
-        .padding(.horizontal, 14)
-        #endif
-        .frame(height: 52)
     }
 
     @ViewBuilder private var fields: some View {
         if senders.count > 1 {
             row("From") {
-                Picker("", selection: Binding(get: { sender?.key ?? "" }, set: { key in senders.first(where: { $0.key == key }).map(choose) })) {
-                    ForEach(senders, id: \.key) { sender in Text(sender.text).tag(sender.key) }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .popover(isPresented: $choosingFrom, arrowEdge: .bottom) {
-                    PopupCard {
-                        ForEach(senders, id: \.key) { option in
-                            ChoiceRow(title: option.text, symbol: option == sender ? .check : nil) {
-                                choose(option)
-                                choosingFrom = false
-                            }
-                        }
-                    }
-                    .frame(minWidth: 320)
-                    .presentationCompactAdaptation(.popover)
-                }
+                Dropdown(options: senders, selection: Binding(get: { sender }, set: { $0.map(choose) }), title: \.text)
+                    .frame(maxWidth: 420)
                 Spacer()
             }
         }
@@ -223,7 +226,7 @@ struct ComposeView: View {
     }
 
     private var message: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.l) {
             BodyEditor(
                 text: $compose.draft.text, height: $bodyHeight, editing: editing, menuOpen: !triggerMatches.isEmpty,
                 onTrigger: { word in
@@ -235,16 +238,15 @@ struct ComposeView: View {
             )
             .frame(height: max(bodyHeight, 160))
             if let signature {
-                Text(signature).font(.ui(14)).foregroundStyle(Tokens.mutedMoreForeground.color).textSelection(.enabled)
+                Text(signature).textStyle(.body, color: Tokens.mutedMoreForeground.color).textSelection(.enabled)
             }
             if let quote = compose.draft.quote, !quote.isEmpty {
                 Chip(title: "•••", help: showQuote ? "Hide the quoted text" : "Show the quoted text", action: { showQuote.toggle() })
                 if showQuote {
                     Text(quote)
-                        .font(.ui(13))
-                        .foregroundStyle(Tokens.mutedMoreForeground.color)
+                        .textStyle(.label, color: Tokens.mutedMoreForeground.color)
                         .textSelection(.enabled)
-                        .padding(.leading, 12)
+                        .padding(.leading, Space.m)
                         .overlay(alignment: .leading) { Rectangle().fill(Tokens.border.color).frame(width: 2) }
                 }
             }
@@ -262,20 +264,18 @@ struct ComposeView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, Space.l)
+        .padding(.vertical, Space.l)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             IconButton(symbol: .paperclip, help: "Attach files (⌘⇧U)") { importing = true }
                 .keyboardShortcut("u", modifiers: [.command, .shift])
             IconButton(symbol: .zap, help: "Snippets (⌘;), or type ; and a name") { pickingSnippet = true }
                 .keyboardShortcut(";", modifiers: .command)
-            IconButton(symbol: .alarmClock, help: "Remind me if nobody replies (⌘⇧H)", tint: compose.remindAt == nil ? Tokens.mutedForeground.color : Tokens.primary.color) {
-                timing = .remind
-            }
+            IconButton(symbol: .alarmClock, help: "Remind me if nobody replies (⌘⇧H)", active: compose.remindAt != nil) { timing = .remind }
             .keyboardShortcut("h", modifiers: [.command, .shift])
             if compose.draft.inReplyTo != nil {
                 IconButton(symbol: .handshake, help: "Instant Intro: move who introduced you to Bcc (⌘⇧I)", action: instantIntro)
@@ -285,15 +285,14 @@ struct ComposeView: View {
             IconButton(symbol: .trash, help: "Discard the draft (⌘⇧,)") { discarding = true }
                 .keyboardShortcut(",", modifiers: [.command, .shift])
         }
-        .padding(.horizontal, 14)
-        .frame(height: 50)
+        .padding(.horizontal, Space.l)
+        .frame(height: Theme.barHeight)
     }
 
     /// The shortcuts that have no button of their own.
-    private var shortcuts: some View {
+    fileprivate var shortcuts: some View {
         Group {
             Button("Close") { close() }.keyboardShortcut("w")
-            Button("From") { choosingFrom = senders.count > 1 }.keyboardShortcut("f", modifiers: [.command, .shift])
         }
         .opacity(0)
         .allowsHitTesting(false)
@@ -301,7 +300,7 @@ struct ComposeView: View {
     }
 
     /// The snippets matching what follows a `;`, over the toolbar.
-    @ViewBuilder private var snippetMenu: some View {
+    @ViewBuilder fileprivate var snippetMenu: some View {
         let matches = triggerMatches
         if !matches.isEmpty {
             PopupCard {
@@ -312,25 +311,22 @@ struct ComposeView: View {
                 }
             }
             .frame(maxWidth: 380)
-            .padding(.leading, 14)
-            .padding(.bottom, 56)
+            .padding(.leading, Space.l)
+            .padding(.bottom, Theme.barHeight + Space.xs)
         }
-    }
-
-    private var rule: some View {
-        Rectangle().fill(Tokens.border.color).frame(height: 1)
     }
 
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Text(label).font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color).frame(width: 56, alignment: .leading)
+            HStack(spacing: Space.s + 2) {
+                Text(label).textStyle(.label, color: Tokens.mutedMoreForeground.color).frame(width: 56, alignment: .leading)
                 content()
             }
-            .font(.ui(14))
-            .padding(.horizontal, 16)
-            .frame(height: 40 * Platform.scale)
-            rule.padding(.leading, 16)
+            .font(.ui(.body))
+            .foregroundStyle(Tokens.foreground.color)
+            .padding(.horizontal, Space.l)
+            .frame(height: Theme.searchHeight * Platform.scale)
+            Rule().padding(.leading, Space.l)
         }
     }
 
@@ -342,14 +338,14 @@ struct ComposeView: View {
     }
 
     /// The compose as it is, with what is typed in the address fields, for the store to keep.
-    private var live: Compose {
+    fileprivate var live: Compose {
         var current = compose
         current.typing = Compose.Typing(to: to, cc: cc, bcc: bcc)
         return current
     }
 
     /// The compose with what is typed in the address fields made addresses.
-    private var assembled: Compose {
+    fileprivate var assembled: Compose {
         var outgoing = compose
         outgoing.draft.to += Address.typed(to)
         outgoing.draft.cc += Address.typed(cc)
@@ -404,7 +400,7 @@ struct ComposeView: View {
     }
 
     /// Puts a snippet in at the caret, with the first recipient's first name.
-    private func put(_ snippet: Snippet, replacingTrigger: Bool) {
+    fileprivate func put(_ snippet: Snippet, replacingTrigger: Bool) {
         let text = snippet.filled(firstName: assembled.draft.to.first?.firstName)
         trigger = nil
         guard replacingTrigger else {
@@ -432,7 +428,7 @@ struct ComposeView: View {
         (to, cc, bcc) = ("", "", "")
     }
 
-    private func add(_ files: [DraftAttachment]) {
+    fileprivate func add(_ files: [DraftAttachment]) {
         var total = compose.draft.attachments.reduce(Int64(0)) { $0 + $1.size }
         for file in files {
             guard total + file.size <= Outgoing.limit else {
@@ -444,7 +440,7 @@ struct ComposeView: View {
         }
     }
 
-    private func picked(_ choice: TimeChoice, for timing: Timing) {
+    fileprivate func picked(_ choice: TimeChoice, for timing: Timing) {
         self.timing = nil
         guard timing == .sendLater else {
             compose.remindAt = choice
@@ -454,7 +450,7 @@ struct ComposeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { send(at: choice.date) }
     }
 
-    private func autosave() async {
+    fileprivate func autosave() async {
         let snapshot = assembled
         guard snapshot.draft != kept else { return }
         store.noteCompose(snapshot)
@@ -467,6 +463,17 @@ struct ComposeView: View {
 
     private func close() {
         closing = true
+        store.closeCompose(assembled, keep: edited || compose.keep || compose.draftId != nil)
+    }
+
+    fileprivate func discard() {
+        closing = true
+        store.discardDraft(compose)
+    }
+
+    /// Gone without Send or Back: swiped away on iOS. Kept as when closed.
+    fileprivate func left() {
+        guard !closing, timing == nil, !pickingSnippet, !importing else { return }
         store.closeCompose(assembled, keep: edited || compose.keep || compose.draftId != nil)
     }
 
@@ -498,7 +505,7 @@ struct ComposeView: View {
         finish(at: date, archive: archive)
     }
 
-    private func finish(at date: Date?, archive: Bool) {
+    fileprivate func finish(at date: Date?, archive: Bool) {
         closing = true
         store.send(assembled, at: date, archive: archive)
     }

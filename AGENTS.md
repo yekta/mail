@@ -119,9 +119,10 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
   as on the Mac and `Platform.scale` enlarges them on iOS) and `Symbol.swift` (the icons, from
   Lucide's font, `Fonts/lucide.ttf`; a new one is a case with its character from the same
   lucide-static version's `font/codepoints.json`).
-- `Shared/Theme`: `Tokens.swift` (generated) and `Theme.swift`.
-- `Shared/Views/UI`: the components: `ActionButton`, `IconButton`, `IconMenu`, `Avatar`,
-  `InputField`, `SearchField`, `Chip`, `ChoiceRow`, `TabStrip`, `ToastView`.
+- `Shared/Theme`: `Tokens.swift` (generated), `Theme.swift` (`Space` and the sizes) and
+  `Typography.swift` (`TextStyle`, the text scale).
+- `Shared/Views/UI`: the design system's components, listed in `packages/apple/DESIGN.md` with
+  its rules; `Gallery.swift` shows them all (⌘K, "Component gallery").
   `Shared/Views/List/RowText.swift`: a thread row's text, for both lists.
 - `Shared/Views/Thread/ThreadActions.swift`: every action on threads, one list for the keys, the
   toolbars, the menus and the palette. `Palette` (⌘K and the shortcuts sheet), `Pickers` (snooze
@@ -160,8 +161,10 @@ from the apps' tokens. The screenshots come from `docs/screenshots`; the favicon
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MailUI/Shared`.
 - A button, a field or a toast in the apps comes from `Shared/Views/UI`. A view does not style
-  a control by hand; what is missing is added to the component.
-- Colours come from `packages/theme/tokens.json`, never a hex value in a view.
+  a control by hand; what is missing is added to the component. The rules (sizes, hover,
+  pending, sheets, errors) are in `packages/apple/DESIGN.md`.
+- Colours come from `packages/theme/tokens.json`, never a hex value in a view. Text sizes come
+  from `TextStyle`, distances from `Space`.
 - The server holds people's mail. Credentials are sealed, tokens hashed, and a sign-in code
   works once and only with its secret. Anything that changes this needs a test in
   `apps/server/src/e2e`.

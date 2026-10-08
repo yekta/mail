@@ -19,10 +19,10 @@ struct ThreadScreen: View {
             HStack(spacing: 0) {
                 thread(height: window.size.height)
                 if showsPane(width: window.size.width), let email = paneEmail {
-                    Rectangle().fill(Tokens.border.color).frame(width: 1)
+                    Rule(vertical: true)
                     PersonView(email: email, openThread: store.open)
                         .overlay(alignment: .topTrailing) {
-                            IconButton(symbol: .x, help: "Close", circled: false) { paneEmail = nil }.padding(12)
+                            IconButton(symbol: .x, help: "Close", circled: false) { paneEmail = nil }.padding(Space.m)
                         }
                         .frame(width: 280)
                 }
@@ -41,21 +41,17 @@ struct ThreadScreen: View {
             store.show(error.localizedDescription)
         }
         .sheet(isPresented: Binding(get: { sheetEmail != nil }, set: { if !$0 { sheetEmail = nil } })) {
-            #if os(macOS)
-            PersonView(email: sheetEmail ?? "", closeSheet: { sheetEmail = nil }) { thread in
-                sheetEmail = nil
-                store.open(thread)
+            Sheet(title: "Contact", background: Tokens.card) {
+                PersonView(email: sheetEmail ?? "", closeSheet: { sheetEmail = nil }) { thread in
+                    sheetEmail = nil
+                    #if os(macOS)
+                    store.open(thread)
+                    #else
+                    store.show(thread: thread)
+                    #endif
+                }
             }
             .environment(store)
-            .frame(width: 340, height: 460)
-            #else
-            PersonView(email: sheetEmail ?? "", closeSheet: { sheetEmail = nil }) { thread in
-                sheetEmail = nil
-                store.show(thread: thread)
-            }
-            .environment(store)
-            .presentationDetents([.medium, .large])
-            #endif
         }
         .id(conversation.id)
     }
@@ -73,8 +69,8 @@ struct ThreadScreen: View {
             ScrollView {
                 page
                     #if os(macOS)
-                    .padding(.top, 16)
-                    .padding(.horizontal, 24)
+                    .padding(.top, Space.l)
+                    .padding(.horizontal, Space.xl + 4)
                     #endif
                     .frame(maxWidth: .infinity, minHeight: height, alignment: .top)
                     #if os(macOS)
@@ -114,7 +110,7 @@ struct ThreadScreen: View {
                 .onTapGesture { if folded { store.unfoldedMessages.insert(message.id) } }
                 .id(message.id)
                 if message.id != conversation.messages.last?.id {
-                    Rectangle().fill(Tokens.border.color).frame(height: 1)
+                    Rule()
                 }
             }
             if let draft = conversation.draftId {
@@ -123,7 +119,7 @@ struct ThreadScreen: View {
             replies
         }
         .padding(.horizontal, pagePadding)
-        .padding(.vertical, 28)
+        .padding(.vertical, Space.xxl)
         .frame(maxWidth: Theme.cardWidth)
         .background(Tokens.card.color)
     }
@@ -132,34 +128,25 @@ struct ThreadScreen: View {
         #if os(macOS)
         80
         #else
-        16
+        Space.l
         #endif
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(conversation.subject)
-                        .font(.ui(24, .semibold))
-                        .foregroundStyle(Tokens.foreground.color)
-                        .textSelection(.enabled)
-                    Text(conversation.participants)
-                        .font(.ui(13))
-                        .foregroundStyle(Tokens.mutedMoreForeground.color)
+        VStack(alignment: .leading, spacing: Space.s + 2) {
+            HStack(alignment: .top, spacing: Space.m) {
+                VStack(alignment: .leading, spacing: Space.xs + 2) {
+                    Text(conversation.subject).textStyle(.title).textSelection(.enabled)
+                    Text(conversation.participants).textStyle(.label, color: Tokens.mutedMoreForeground.color)
                 }
                 Spacer(minLength: 0)
-                Button {
-                    store.toggleStar(conversation.id)
-                } label: {
+                PlainButton(help: conversation.starred ? "Unstar" : "Star", action: { store.toggleStar(conversation.id) }) {
                     Image(conversation.starred ? .starFilled : .star, size: 20)
                         .foregroundStyle(conversation.starred ? Tokens.star.color : Tokens.mutedMoreForeground.color)
                 }
-                .buttonStyle(.plain)
-                .help(conversation.starred ? "Unstar" : "Star")
             }
             if !conversation.labels.isEmpty || conversation.muted || conversation.unsubscribe {
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: Space.m) {
                     FlowLayout {
                         ForEach(conversation.labels) { label in Chip(title: label.name, symbol: .tag) }
                         if conversation.muted {
@@ -173,40 +160,36 @@ struct ThreadScreen: View {
                 }
             }
             if conversation.messages.contains(where: \.blockedImages) {
-                HStack(spacing: 8) {
-                    Text("Images from the sender were left out.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                    ActionButton(title: "Load images", symbol: .image, variant: .ghost, action: store.showImages)
-                }
+                Notice(text: "Images from the sender were left out.", action: "Load images", perform: store.showImages)
             }
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, Space.xl)
     }
 
     /// The reply the user started and didn't send.
     private func draftCard(_ id: String) -> some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Tokens.border.color).frame(height: 1)
-            HStack(spacing: 12) {
-                Image(.pencil, size: 14)
-                Text("Draft").font(.ui(14, .semibold))
-                Text("A reply you started").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
-                Spacer(minLength: 8)
+            Rule()
+            HStack(spacing: Space.m) {
+                Image(.pencil, size: 14).foregroundStyle(Tokens.destructive.color)
+                Text("Draft").textStyle(.subheading, color: Tokens.destructive.color)
+                Text("A reply you started").textStyle(.label, color: Tokens.mutedMoreForeground.color)
+                Spacer(minLength: Space.s)
                 ActionButton(title: "Open", variant: .outline) { store.openDraft(id) }
             }
-            .foregroundStyle(Tokens.destructive.color)
-            .padding(.vertical, 14)
+            .padding(.vertical, Space.l)
             .contentShape(Rectangle())
             .onTapGesture { store.openDraft(id) }
         }
     }
 
     private var replies: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             IconButton(symbol: .replyAll, help: "Reply all") { store.reply(.replyAll, to: conversation.id) }
             IconButton(symbol: .reply, help: "Reply") { store.reply(.reply, to: conversation.id) }
             IconButton(symbol: .forward, help: "Forward") { store.reply(.forward, to: conversation.id) }
         }
-        .padding(.top, 22)
+        .padding(.top, Space.xl + 2)
     }
 
     private func open(_ message: MessageItem, _ index: Int) {
@@ -251,31 +234,26 @@ struct MessageCard: View {
     let save: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack(alignment: .center, spacing: Space.m) {
                 Avatar(initials: message.initials, email: message.fromEmail, size: 34)
                     .onTapGesture { if !folded { showPerson() } }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(message.fromName)
-                        .font(.ui(14, folded ? .regular : .semibold))
-                        .foregroundStyle(folded ? Tokens.mutedMoreForeground.color : Tokens.foreground.color)
+                        .textStyle(folded ? .body : .subheading, color: folded ? Tokens.mutedMoreForeground.color : Tokens.foreground.color)
                         .onTapGesture { if !folded { showPerson() } }
                         .help(folded ? "" : message.fromEmail)
-                    Text(folded ? message.snippet : message.to)
-                        .font(.ui(12.5))
-                        .foregroundStyle(Tokens.mutedMoreForeground.color)
-                        .lineLimit(1)
+                    Text(folded ? message.snippet : message.to).textStyle(.caption).lineLimit(1)
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: Space.s)
                 if !message.attachments.isEmpty {
                     Image(.paperclip, size: 13).foregroundStyle(Tokens.mutedMoreForeground.color)
                 }
-                Text(message.date).font(.ui(12)).foregroundStyle(Tokens.mutedMoreForeground.color)
+                Text(message.date).textStyle(.caption)
                 if canShowOriginal {
-                    IconButton(
-                        symbol: original ? .moon : .sun, help: original ? "Show in dark colours" : "Show the original",
-                        tint: Tokens.mutedMoreForeground.color, circled: false
-                    ) { store.toggleOriginal(message.id) }
+                    IconButton(symbol: original ? .moon : .sun, help: original ? "Show in dark colours" : "Show the original", circled: false, quiet: true) {
+                        store.toggleOriginal(message.id)
+                    }
                 }
             }
             if !folded {
@@ -284,13 +262,9 @@ struct MessageCard: View {
                         MessageWebView(html: html, original: original)
                     } else if message.failed {
                         Text("This message couldn't be loaded. Open the conversation again to retry.")
-                            .font(.ui(14))
-                            .foregroundStyle(Tokens.mutedMoreForeground.color)
+                            .textStyle(.body, color: Tokens.mutedMoreForeground.color)
                     } else {
-                        Text(message.snippet)
-                            .font(.ui(14))
-                            .foregroundStyle(Tokens.mutedMoreForeground.color)
-                            .redacted(reason: .placeholder)
+                        Text(message.snippet).textStyle(.body, color: Tokens.mutedMoreForeground.color).redacted(reason: .placeholder)
                     }
                 }
                 .padding(.leading, bodyIndent)
@@ -299,7 +273,7 @@ struct MessageCard: View {
                 }
             }
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, Space.l)
     }
 
     /// On the Mac the body lines up with the name beside the avatar; a phone has no width to spare.
@@ -319,7 +293,7 @@ struct MessageCard: View {
     }
 
     private var attachments: some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: Space.s) {
             ForEach(Array(message.attachments.enumerated()), id: \.offset) { index, attachment in
                 Chip(
                     title: attachment.name, symbol: .paperclip,

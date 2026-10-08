@@ -8,6 +8,7 @@ enum Modal: Identifiable {
     case snooze([String])
     case shortcuts
     case settings
+    case gallery
 
     var id: String {
         switch self {
@@ -16,6 +17,7 @@ enum Modal: Identifiable {
         case .snooze(let threads): "snooze/\(threads.joined(separator: ","))"
         case .shortcuts: "shortcuts"
         case .settings: "settings"
+        case .gallery: "gallery"
         }
     }
 }
@@ -27,7 +29,8 @@ extension MailStore {
             if let labeling { return .label(labeling) }
             if let snoozing { return .snooze(snoozing) }
             if shortcutsOpen { return .shortcuts }
-            return settingsOpen ? .settings : nil
+            if settingsOpen { return .settings }
+            return galleryOpen ? .gallery : nil
         }
         set {
             guard newValue == nil else { return }
@@ -36,6 +39,7 @@ extension MailStore {
             snoozing = nil
             shortcutsOpen = false
             settingsOpen = false
+            galleryOpen = false
         }
     }
 }
@@ -60,12 +64,10 @@ private struct MailSheets: ViewModifier {
                     case .snooze(let threads): SnoozePicker(threads: threads)
                     case .shortcuts: ShortcutsView()
                     case .settings: SettingsView()
+                    case .gallery: GalleryView()
                     }
                 }
                 .environment(store)
-                #if os(iOS)
-                .presentationDetents(detents(modal))
-                #endif
             }
             .alert(
                 store.confirmation?.title ?? "", isPresented: Binding(get: { store.confirmation != nil }, set: { if !$0 { store.confirmation = nil } }),
@@ -77,13 +79,4 @@ private struct MailSheets: ViewModifier {
                 Text(confirmation.message)
             }
     }
-
-    #if os(iOS)
-    private func detents(_ modal: Modal) -> Set<PresentationDetent> {
-        switch modal {
-        case .snooze, .label: [.medium, .large]
-        default: [.large]
-        }
-    }
-    #endif
 }

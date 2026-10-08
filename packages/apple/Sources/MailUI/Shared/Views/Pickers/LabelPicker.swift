@@ -41,44 +41,18 @@ struct LabelPicker: View {
 
     var body: some View {
         let choices = choices
-        VStack(alignment: .leading, spacing: 0) {
-            Text(labeling.move ? "Move to" : "Label")
-                .font(.ui(13, .semibold))
-                .foregroundStyle(Tokens.foreground.color)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 4)
-            SearchField(
-                placeholder: "Find or create a label", text: $query, symbol: .tag,
-                submit: { pick(choices, highlighted) }, move: { highlighted = max(0, min(highlighted + $0, choices.count - 1)) },
-                escape: { store.labeling = nil }
-            )
-            ScrollViewReader { scroller in
-                ScrollView {
-                    VStack(spacing: 2) {
-                        ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
-                            row(choice, highlighted: index == highlighted) { pick(choices, index) }.id(choice.id)
-                        }
-                        if choices.isEmpty {
-                            Text("No labels yet. Type a name to make one.")
-                                .font(.ui(13))
-                                .foregroundStyle(Tokens.mutedMoreForeground.color)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                        }
-                    }
-                    .padding(8)
-                }
-                .onChange(of: highlighted) { _, index in
-                    guard choices.indices.contains(index) else { return }
-                    scroller.scrollTo(choices[index].id)
+        Sheet(title: labeling.move ? "Move to" : "Label") {
+            VStack(spacing: 0) {
+                SearchField(
+                    placeholder: "Find or create a label", text: $query, symbol: .tag,
+                    submit: { pick(choices, highlighted) }, move: { highlighted = highlighted.moved(by: $0, in: choices.count) },
+                    escape: { store.labeling = nil }
+                )
+                ChoiceList(items: choices, highlighted: highlighted, empty: "No labels yet. Type a name to make one.") { index, choice in
+                    row(choice, highlighted: index == highlighted) { pick(choices, index) }
                 }
             }
         }
-        #if os(macOS)
-        .frame(width: 400, height: 380, alignment: .top)
-        #endif
-        .background(Tokens.popover.color)
         .onChange(of: query) { highlighted = 0 }
     }
 

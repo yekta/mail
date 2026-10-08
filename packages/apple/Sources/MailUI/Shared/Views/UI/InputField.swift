@@ -12,8 +12,8 @@ struct InputField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.ui(11, .medium)).foregroundStyle(Tokens.mutedMoreForeground.color)
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text(label).textStyle(.footnote).fontWeight(.medium)
             Group {
                 if secure {
                     SecureField(placeholder, text: $text)
@@ -25,7 +25,7 @@ struct InputField: View {
                                 Text(placeholder).foregroundStyle(Tokens.mutedMoreForeground.color).padding(.leading, 5).allowsHitTesting(false)
                             }
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, Space.s)
                 } else {
                     TextField(placeholder, text: $text)
                         #if os(iOS)
@@ -36,11 +36,12 @@ struct InputField: View {
             }
             .textFieldStyle(.plain)
             .focused($focused)
-            .font(.ui(14))
-            .padding(.horizontal, 10)
-            .frame(height: (lines > 1 ? CGFloat(lines) * 18 + 16 : 34) * Platform.scale)
+            .font(.ui(.body))
+            .foregroundStyle(Tokens.foreground.color)
+            .padding(.horizontal, Space.s + 2)
+            .frame(height: (lines > 1 ? CGFloat(lines) * 18 + 16 : Theme.fieldHeight) * Platform.scale)
             .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Tokens.card.color))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Tokens.input.color, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Tokens.input.color, lineWidth: Theme.hairline))
         }
         .onAppear {
             guard autofocus else { return }

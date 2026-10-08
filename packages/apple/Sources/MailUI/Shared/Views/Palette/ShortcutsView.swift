@@ -46,42 +46,26 @@ enum Shortcuts {
 
 /// `?`: every key, in a sheet.
 struct ShortcutsView: View {
-    @Environment(MailStore.self) private var store
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Keyboard shortcuts").font(.ui(17, .semibold)).foregroundStyle(Tokens.foreground.color)
-                Spacer()
-                IconButton(symbol: .x, help: "Close", circled: false) { store.shortcutsOpen = false }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            Rectangle().fill(Tokens.border.color).frame(height: 1)
+        Sheet(title: "Keyboard shortcuts", size: .large) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: Space.xxl) {
                     ForEach(Shortcuts.sections, id: \.0) { title, keys in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(title.uppercased())
-                                .font(.ui(10.5, .semibold))
-                                .foregroundStyle(Tokens.mutedMoreForeground.color)
-                            ForEach(keys, id: \.0) { name, key in
-                                HStack {
-                                    Text(name).font(.ui(13)).foregroundStyle(Tokens.foreground.color)
-                                    Spacer()
-                                    Text(key).font(.system(size: 12 * Platform.scale, design: .monospaced)).foregroundStyle(Tokens.mutedForeground.color)
+                        FormSection(title: title) {
+                            VStack(alignment: .leading, spacing: Space.s) {
+                                ForEach(keys, id: \.0) { name, key in
+                                    HStack {
+                                        Text(name).textStyle(.label)
+                                        Spacer()
+                                        Text(key).textStyle(.mono)
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                .padding(20)
+                .padding(Space.xl)
             }
         }
-        #if os(macOS)
-        .frame(width: 480, height: 560)
-        #endif
-        .background(Tokens.popover.color)
     }
 }

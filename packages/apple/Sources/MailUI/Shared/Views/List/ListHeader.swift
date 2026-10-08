@@ -10,22 +10,22 @@ struct ListHeader: View {
 
     var body: some View {
         if Self.shows(store) {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.m) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     TabStrip(
                         tabs: store.splits, selected: chosenSplit, title: \.name, count: \.unread,
                         pick: { store.select(mailbox: $0.mailbox) }
                     )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Space.l)
                 }
                 if let filter = store.filter {
                     Chip(title: filter == .unread ? "Unread" : "Starred", symbol: .listFilter, help: "Show everything", remove: { store.setFilter(nil) })
-                        .padding(.trailing, 16)
+                        .padding(.trailing, Space.l)
                 }
             }
             .frame(height: 38 * Platform.scale)
             .background(Tokens.card.color)
-            .overlay(alignment: .bottom) { Rectangle().fill(Tokens.border.color).frame(height: 1) }
+            .rule(.bottom)
         }
     }
 
@@ -35,14 +35,31 @@ struct ListHeader: View {
     }
 }
 
+/// An empty mailbox: a calm line instead of a list.
+struct EmptyList: View {
+    @Environment(MailStore.self) private var store
+
+    var body: some View {
+        EmptyState(symbol: store.searchRows != nil ? .search : .inbox, message: message)
+    }
+
+    private var message: String {
+        if store.searchRows != nil { return "Nothing matches." }
+        if store.filter == .unread { return "Nothing unread." }
+        if store.filter == .starred { return "Nothing starred." }
+        if store.connection == "connecting" && store.accounts.isEmpty { return "Syncing…" }
+        return store.baseMailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."
+    }
+}
+
 /// The threads picked on the Mac, with what can be done to them all.
 struct SelectionBar: View {
     @Environment(MailStore.self) private var store
 
     var body: some View {
         let threads = Array(store.selection)
-        HStack(spacing: 8) {
-            Text("\(store.selection.count) selected").font(.ui(13, .medium)).foregroundStyle(Tokens.foreground.color)
+        HStack(spacing: 0) {
+            Text("\(store.selection.count) selected").padding(.trailing, Space.s).textStyle(.labelStrong)
             ActionButton(title: "Clear", variant: .ghost, action: store.clearSelection)
             Spacer()
             ForEach(store.applicable([.archive, .trash, .snooze, .label, .read], to: threads)) { command in
