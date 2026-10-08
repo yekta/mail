@@ -80,6 +80,17 @@ pub fn initials(address: &Address) -> String {
     }
 }
 
+/// A snippet without the invisible words newsletters pad their preview with (`&#847;&zwnj;`
+/// and the like), which macOS stretches a line's spaces over.
+pub fn snippet(text: &str) -> String {
+    let invisible = |c: char| {
+        matches!(c, '\u{00AD}' | '\u{034F}' | '\u{115F}' | '\u{1160}' | '\u{17B4}' | '\u{17B5}' | '\u{180E}')
+            || matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}')
+            || matches!(c, '\u{3164}' | '\u{FEFF}' | '\u{FFA0}')
+    };
+    text.split_whitespace().filter(|word| !word.chars().all(invisible)).collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +143,15 @@ mod tests {
         assert_eq!(initials(&person("Ada King Lovelace", "ada@x.com")), "AL");
         assert_eq!(initials(&Address::new(None, "grace.hopper@navy.mil")), "GH");
         assert_eq!(initials(&Address::new(None, "x@y.z")), "X");
+    }
+
+    #[test]
+    fn snippets_drop_invisible_padding() {
+        let padded = "Log in to view card details \u{034F}\u{200C} \u{034F}\u{200C} \u{00AD} \u{FEFF}";
+        assert_eq!(snippet(padded), "Log in to view card details");
+        assert_eq!(
+            snippet("A family 👨\u{200D}👩\u{200D}👧 and می\u{200C}خواهم"),
+            "A family 👨\u{200D}👩\u{200D}👧 and می\u{200C}خواهم"
+        );
     }
 }
