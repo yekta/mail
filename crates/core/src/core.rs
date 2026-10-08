@@ -1636,12 +1636,15 @@ mod tests {
         let thread = demo.thread("Dinner on Saturday").await;
         let ui = json!({
             "mailbox": "demo-home/inbox", "thread": thread, "selected": thread, "rows": 3, "list_offset": 120.5,
-            "search": "dinner", "compose": { "draft": { "text": "hello" } }, "sidebar": true, "unfolded": ["m1"],
+            "thread_offset": 300.0, "selection": [thread], "search": "dinner",
+            "compose": { "draft": { "text": "hello" } }, "sidebar": true, "unfolded": ["m1"],
         });
         demo.call(json!({ "type": "save_ui", "ui": ui })).await.unwrap();
         let boot = demo.call(json!({ "type": "boot" })).await.unwrap();
         assert_eq!(boot["ui"]["mailbox"], "demo-home/inbox");
         assert_eq!(boot["ui"]["list_offset"], 120.5);
+        assert_eq!(boot["ui"]["thread_offset"], 300.0);
+        assert_eq!(boot["ui"]["selection"], json!([thread]));
         assert_eq!(boot["ui"]["compose"]["draft"]["text"], "hello");
         assert_eq!(boot["ui"]["unfolded"], json!(["m1"]));
         assert_eq!(boot["ui"]["filter"], Value::Null, "what wasn't saved has its default");

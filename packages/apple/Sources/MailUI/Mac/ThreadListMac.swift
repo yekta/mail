@@ -44,7 +44,8 @@ struct ThreadListMac: NSViewRepresentable {
             context.coordinator, selector: #selector(Coordinator.scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView
         )
         context.coordinator.table = table
-        context.coordinator.pendingOffset = store.listOffset
+        context.coordinator.keeper = ScrollKeeper(restore: store.listOffset, report: store.noteScroll)
+        context.coordinator.keeper?.attach(scroll)
         return scroll
     }
 
@@ -78,8 +79,8 @@ struct ThreadListMac: NSViewRepresentable {
         private var prefetch: DispatchWorkItem?
         /// The row last clicked: it is where the pointer is, so the list doesn't move to show it.
         private var clickedRow: String?
-        /// Where to scroll to once the rows are there: where the list was last.
-        var pendingOffset: CGFloat?
+        /// Keeps the list where it was left, across the window and the app being made anew.
+        var keeper: ScrollKeeper?
 
         init(store: MailStore) {
             self.store = store
@@ -108,21 +109,12 @@ struct ThreadListMac: NSViewRepresentable {
                     view.isChecked = checked.contains(id)
                 }
             }
-            restoreOffset()
             if moved, let selected, selected != clickedRow, store.conversation == nil,
                let index = rows.firstIndex(where: { $0.id == selected }) {
                 table.scrollRowToVisible(index)
             }
             if moved { clickedRow = nil }
             if changed != [] { schedulePrefetch() }
-        }
-
-        private func restoreOffset() {
-            guard let offset = pendingOffset, !rows.isEmpty, let scroll = table?.enclosingScrollView else { return }
-            pendingOffset = nil
-            table?.layoutSubtreeIfNeeded()
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: offset))
-            scroll.reflectScrolledClipView(scroll.contentView)
         }
 
         /// The rows that changed when the list holds the same threads in the same order; nil
@@ -167,9 +159,6 @@ struct ThreadListMac: NSViewRepresentable {
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? { nil }
 
         @objc func scrolled() {
-            if pendingOffset == nil, let scroll = table?.enclosingScrollView {
-                store.noteScroll(scroll.contentView.bounds.origin.y)
-            }
             schedulePrefetch()
         }
 

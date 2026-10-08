@@ -5,6 +5,7 @@ import SwiftUI
 /// The Mac app: the list or the open thread, with the sidebar sliding over them from the left.
 public struct MailMacApp: App {
     @State private var store = MailStore()
+    @NSApplicationDelegateAdaptor(MacDelegate.self) private var delegate
 
     public init() {
         Notifier.shared.install()
@@ -19,12 +20,30 @@ public struct MailMacApp: App {
             MacRoot()
                 .environment(store)
                 .preferredColorScheme(store.appearance.scheme)
-                .onAppear { store.start(defaultServer: defaultServer) }
+                .onAppear {
+                    delegate.store = store
+                    store.start(defaultServer: defaultServer)
+                }
                 .onOpenURL { url in Task { await store.finishSignIn(url) } }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)
         .commands { MacCommands(store: store) }
+    }
+}
+
+/// Saves where the app is, then lets it quit: SwiftUI on its own refuses to quit under a sheet.
+@MainActor
+final class MacDelegate: NSObject, NSApplicationDelegate {
+    var store: MailStore?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let store else { return .terminateNow }
+        Task {
+            await store.saveUiNow()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
 
@@ -51,7 +70,6 @@ struct MacRoot: View {
         }
         .frame(minWidth: 860, minHeight: 520)
         .ignoresSafeArea()
-        .sheet(item: $store.compose) { compose in ComposeView(compose: compose).environment(store) }
         .mailSheets(store)
     }
 
@@ -83,7 +101,7 @@ struct MacRoot: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            Text(store.conversation == nil ? store.mailboxName : "")
+            Text(store.conversation == nil && store.compose == nil ? store.mailboxName : "")
                 .font(.ui(13, .medium))
                 .foregroundStyle(Tokens.secondaryForeground.color)
                 .frame(maxWidth: .infinity)
@@ -92,48 +110,58 @@ struct MacRoot: View {
             if case .ready(let version) = store.updater.state {
                 Banner(symbol: .circleCheck, text: "Wonnet \(version) is installed. Restart to use it.", action: "Restart") { store.updater.relaunch() }
             }
-            MacTopBar(focusSearch: focusSearch, showSidebar: { showSidebar(true) })
-            Rectangle().fill(Tokens.border.color).frame(height: 1)
-            ZStack {
-                Tokens.background.color
-                // The list stays under an open thread, so going back finds it where it was left.
-                Group {
-                    if store.visibleRows.isEmpty, store.splits.isEmpty, store.filter == nil {
-                        EmptyList()
-                    } else if store.visibleRows.isEmpty {
-                        VStack(spacing: 0) {
-                            ListHeader()
-                            EmptyList().frame(maxHeight: .infinity)
-                        }
-                        .frame(maxWidth: Theme.cardWidth)
-                        .background(Tokens.card.color)
-                        .padding(.top, 16)
-                        .padding(.horizontal, 24)
-                    } else {
-                        // The list scrolls the whole page; only its header stays put above it.
-                        let header = ListHeader.shows(store)
-                        VStack(spacing: 0) {
-                            if header {
-                                ListHeader()
-                                    .frame(maxWidth: Theme.cardWidth)
-                                    .padding(.top, 16)
-                                    .padding(.horizontal, 24)
-                            }
-                            ThreadListMac(
-                                store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
-                                topInset: header ? 0 : 16, shown: store.conversation == nil
-                            )
-                        }
-                    }
-                }
-                .opacity(store.conversation == nil ? 1 : 0)
-                .allowsHitTesting(store.conversation == nil)
-                if let conversation = store.conversation {
-                    ThreadScreen(conversation: conversation)
-                }
+            if let compose = store.compose {
+                // Writing is a page of its own, as a thread is, with its bar on top.
+                ComposeView(compose: compose).id(compose.id)
+            } else {
+                MacTopBar(focusSearch: focusSearch, showSidebar: { showSidebar(true) })
+                Rectangle().fill(Tokens.border.color).frame(height: 1)
+                page
             }
         }
         .background(Tokens.card.color)
+    }
+
+    /// The list, and the thread open over it.
+    private var page: some View {
+        ZStack {
+            Tokens.background.color
+            // The list stays under an open thread, so going back finds it where it was left.
+            Group {
+                if store.visibleRows.isEmpty, store.splits.isEmpty, store.filter == nil {
+                    EmptyList()
+                } else if store.visibleRows.isEmpty {
+                    VStack(spacing: 0) {
+                        ListHeader()
+                        EmptyList().frame(maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: Theme.cardWidth)
+                    .background(Tokens.card.color)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
+                } else {
+                    // The list scrolls the whole page; only its header stays put above it.
+                    let header = ListHeader.shows(store)
+                    VStack(spacing: 0) {
+                        if header {
+                            ListHeader()
+                                .frame(maxWidth: Theme.cardWidth)
+                                .padding(.top, 16)
+                                .padding(.horizontal, 24)
+                        }
+                        ThreadListMac(
+                            store: store, rows: store.visibleRows, selected: store.selected, checked: store.selection,
+                            topInset: header ? 0 : 16, shown: store.conversation == nil
+                        )
+                    }
+                }
+            }
+            .opacity(store.conversation == nil ? 1 : 0)
+            .allowsHitTesting(store.conversation == nil)
+            if let conversation = store.conversation {
+                ThreadScreen(conversation: conversation)
+            }
+        }
     }
 }
 
