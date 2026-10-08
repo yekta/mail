@@ -3,7 +3,8 @@ import SwiftUI
 import UIKit
 
 /// The thread list on iOS: a table that only makes the rows on screen. A swipe to the left
-/// deletes, snoozes or archives; one to the right opens the drawer. In edit mode, rows are picked.
+/// deletes, snoozes or archives; one to the right opens the drawer, unless a row's actions are
+/// out, when it puts them away. In edit mode, rows are picked.
 struct ThreadListIOS: UIViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
@@ -16,7 +17,7 @@ struct ThreadListIOS: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(store: store, open: open) }
 
     func makeUIView(context: Context) -> UITableView {
-        let table = UITableView(frame: .zero, style: .plain)
+        let table = ThreadTable(frame: .zero, style: .plain)
         table.register(ThreadCell.self, forCellReuseIdentifier: ThreadCell.identifier)
         table.rowHeight = Theme.iosRowHeight
         table.separatorStyle = .none
@@ -165,6 +166,14 @@ struct ThreadListIOS: UIViewRepresentable {
             return action
         }
 
+        func tableView(_ tableView: UITableView, willBeginEditingRowAt indexPath: IndexPath) {
+            (tableView as? ThreadTable)?.swipedRow = indexPath
+        }
+
+        func tableView(_ tableView: UITableView, didEndEditingRowAt indexPath: IndexPath?) {
+            (tableView as? ThreadTable)?.swipedRow = nil
+        }
+
         func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
             let row = rows[indexPath.row]
             let store = store
@@ -177,6 +186,12 @@ struct ThreadListIOS: UIViewRepresentable {
             ])
         }
     }
+}
+
+/// The table, which keeps the drawer out of a swipe while a row's actions are out.
+final class ThreadTable: UITableView, OwnsRightSwipe {
+    var swipedRow: IndexPath?
+    var ownsRightSwipe: Bool { swipedRow != nil }
 }
 
 /// One thread on three lines: who wrote and the star, the subject, the snippet and the date.

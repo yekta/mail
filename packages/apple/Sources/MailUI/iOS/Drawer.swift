@@ -30,6 +30,11 @@ struct DrawerView<Sidebar: View, Content: View>: UIViewControllerRepresentable {
     }
 }
 
+/// A view the drawer leaves a swipe to the right to while `ownsRightSwipe` is true.
+protocol OwnsRightSwipe: AnyObject {
+    var ownsRightSwipe: Bool { get }
+}
+
 final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     private static let widest: CGFloat = 340
     /// What the sidebar leaves of the card on a phone.
@@ -222,14 +227,16 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         guard abs(speed.x) > abs(speed.y) * 1.3 else { return false }
         let rightwards = speed.x > 0
         guard !open else { return !rightwards }
-        return enabled && rightwards && !scrollsSideways(under: pan.location(in: view))
+        return enabled && rightwards && !takesRightSwipe(under: pan.location(in: view))
     }
 
-    /// Whether what the finger is on still scrolls to the left of where it is, like the tabs of
-    /// a split inbox.
-    private func scrollsSideways(under point: CGPoint) -> Bool {
+    /// Whether what the finger is on has a swipe to the right of its own: a view that still
+    /// scrolls to the left of where it is, like the tabs of a split inbox, or one whose swipe
+    /// is out, like a row showing its actions.
+    private func takesRightSwipe(under point: CGPoint) -> Bool {
         var view = self.view.hitTest(point, with: nil)
         while let current = view, current !== self.view {
+            if let owner = current as? OwnsRightSwipe, owner.ownsRightSwipe { return true }
             if let scroll = current as? UIScrollView, scroll.isScrollEnabled, scroll.contentSize.width > scroll.bounds.width + 1,
                 scroll.contentOffset.x > -scroll.adjustedContentInset.left + 1
             {
