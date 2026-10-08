@@ -15,7 +15,10 @@ added to the component, not to the view.
 - Nothing clickable is under 28pt tall. 36pt is the default on the Mac; iOS enlarges everything
   by `Platform.scale`. `ControlSize` is `.small` (28), `.regular` (36) or `.large` (44).
 - Everything clickable has a hover state, shown at once: no animation on colours. A button's
-  face reads `@Environment(\.hovered)`, set by `PressStyle`, which every button uses.
+  face reads `@Environment(\.hovered)`, set by `PressStyle`, which every button uses. A control
+  hovers in `accentStronger`, which shows on every surface, a hovered row (`accent`) included; a
+  row hovers in `accent`. A control with a colour of its own (the star) hovers in a wash of
+  it: the colour at `tintOpacity`, which differs in the dark scheme.
 - Things side by side have no gap between them: an `HStack(spacing: 0)` of buttons, rows with
   no spacing. The space is inside each control, so hover areas and hit areas touch.
 - Every button can carry an icon and has a `pending` state; while pending, the spinner stands
@@ -37,7 +40,8 @@ added to the component, not to the view.
 | --- | --- |
 | `ActionButton` | Words, an optional icon, four variants (`primary`, `outline`, `ghost`, `destructive`), three sizes, `pending`, `wide` |
 | `IconButton`, `IconMenu`, `IconCircle` | An icon in a thin circle; `active`, `quiet`, `circled`, `pending` |
-| `PlainButton` | Only its content, still with hover, press and disabled states, and the minimum height |
+| `PlainButton` | Only its content, still with hover, press and disabled states, and the minimum height; `tint` colours its hover |
+| `StarButton` | A thread's star, in the star colour when starred or hovered |
 | `InputField` | A text field with its label above, or a text box of `lines` |
 | `SearchField` | The search icon, the words, Clear; `.sheet` on a hairline with list keys, `.bar` as the top bar's capsule |
 | `Dropdown` | A choice from a short list, with a label |

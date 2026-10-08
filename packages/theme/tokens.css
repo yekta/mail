@@ -19,6 +19,7 @@
   --muted-most-foreground: #c4c4c4;
   --accent: #f6f7f8;
   --accent-foreground: #434b52;
+  --accent-stronger: #e6e8ea;
   --destructive: #dd5050;
   --destructive-foreground: #ffffff;
   --success: #4a9d5f;
@@ -33,6 +34,8 @@
   --shadow: #000000;
   --shadow-opacity: 0.14;
   --shadow-stronger-opacity: 0.22;
+  --tint-opacity: 0.12;
+  --tint-stronger-opacity: 0.2;
   --account-1: #cd605a;
   --account-2: #c56c21;
   --account-3: #a48100;
@@ -61,6 +64,7 @@
     --muted-most-foreground: #5c5c5c;
     --accent: #2b2d2e;
     --accent-foreground: #f1f1f1;
+    --accent-stronger: #393c3e;
     --destructive: #e06060;
     --destructive-foreground: #ffffff;
     --success: #5fab72;
@@ -75,6 +79,8 @@
     --shadow: #000000;
     --shadow-opacity: 0.4;
     --shadow-stronger-opacity: 0.6;
+    --tint-opacity: 0.2;
+    --tint-stronger-opacity: 0.3;
     --account-1: #f07f77;
     --account-2: #e78a45;
     --account-3: #c7a01e;

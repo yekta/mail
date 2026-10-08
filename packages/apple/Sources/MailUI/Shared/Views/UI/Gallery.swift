@@ -65,7 +65,8 @@ struct GalleryView: View {
                             }
                         }
                         HStack(spacing: 0) {
-                            PlainButton(help: "Star", action: {}) { Image(.starFilled, size: 20).foregroundStyle(Tokens.star.color) }
+                            StarButton(starred: true) {}
+                            StarButton(starred: false) {}
                             PlainButton(action: {}) { Text("Undo").textStyle(.labelStrong, color: Tokens.primary.color) }
                         }
                     }

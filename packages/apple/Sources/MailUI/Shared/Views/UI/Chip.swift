@@ -44,7 +44,7 @@ struct Chip: View {
         .padding(.horizontal, Space.s + 2)
         .frame(height: Theme.chipHeight * Platform.scale)
         .foregroundStyle(variant == .invalid ? Tokens.destructive.color : Tokens.foreground.color)
-        .background(Capsule().fill(hovered && action != nil ? Tokens.accent.color : Tokens.muted.color))
+        .background(Capsule().fill(hovered && action != nil ? Tokens.accentStronger.color : Tokens.muted.color))
         .overlay(Capsule().strokeBorder(variant == .invalid ? Tokens.destructive.color.opacity(0.6) : .clear, lineWidth: Theme.hairline))
         .contentShape(Capsule())
     }
