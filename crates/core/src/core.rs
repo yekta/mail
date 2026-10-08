@@ -22,8 +22,8 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 use crate::api::{
-    ActReply, Action, Command, Config, Contacts, DraftReply, Event, Filter, MessageView, PreferenceValue, Preferences,
-    ThreadView,
+    ActReply, Action, Boot, Command, Config, Contacts, DraftReply, Event, Filter, MessageView, PreferenceValue,
+    Preferences, ThreadView, UiState,
 };
 use crate::link::{Link, LinkEvent};
 use crate::render::drafts::{self, ReplyKind};
@@ -396,6 +396,8 @@ impl Core {
         let to_value = |value: Result<ActReply>| value.and_then(|value| Ok(serde_json::to_value(value)?));
         Some(match command {
             Command::Status => self.status(),
+            Command::Boot => self.boot(),
+            Command::SaveUi { ui } => self.save_ui(&ui),
             Command::SetServer { url } => self.set_server(&url),
             Command::SignInGoogle => return self.sign_in_google(id),
             Command::FinishSignIn { url } => return self.finish_sign_in(id, &url),
@@ -457,6 +459,35 @@ impl Core {
         }))
     }
 
+    /// Everything the first frame shows, as the app was left: a page the app draws in one go.
+    fn boot(&mut self) -> Result<Value> {
+        let ui = self.ui();
+        let status = self.status()?;
+        let mailboxes = self.mailboxes()?;
+        let limit = ui.rows.clamp(100, 1000);
+        let page = self.store.thread_page(&ui.mailbox, 0, limit, ui.filter, &Local::now())?;
+        let thread = ui.thread.as_deref().and_then(|thread| self.open_thread(thread, ui.images).ok());
+        let search = match ui.search.trim() {
+            "" => None,
+            query => {
+                let reader = self.reader.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                reader.search(query, &Local::now()).ok().map(|(_, rows)| rows)
+            }
+        };
+        let values = self.store.preferences()?.into_iter().map(|(key, value)| PreferenceValue { key, value }).collect();
+        let boot = Boot { status, mailboxes, page, thread, search, preferences: Preferences { values }, ui };
+        Ok(serde_json::to_value(boot)?)
+    }
+
+    fn ui(&self) -> UiState {
+        self.store.meta("ui").and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
+    }
+
+    fn save_ui(&mut self, ui: &UiState) -> Result<Value> {
+        self.store.set_meta("ui", Some(&serde_json::to_string(ui)?))?;
+        Ok(json!({}))
+    }
+
     fn set_server(&mut self, url: &str) -> Result<Value> {
         let url = url.trim().trim_end_matches('/');
         if !(url.starts_with("https://") || url.starts_with("http://")) {
@@ -475,6 +506,7 @@ impl Core {
     /// Forgets all mail and everything waiting on it.
     fn forget(&mut self) -> Result<()> {
         self.store.clear()?;
+        self.store.set_meta("ui", None)?;
         self.backlog.clear();
         self.bodies_in_flight.clear();
         self.body_failures.clear();
@@ -1590,6 +1622,43 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
         let (handle, events) = status("https://new.example");
         assert_eq!(ask(&handle, &events).await, "https://mine.example");
+    }
+
+    #[tokio::test]
+    async fn boot_answers_the_screen_the_app_was_left_on() {
+        let mut demo = Demo::start();
+        let first = demo.call(json!({ "type": "boot" })).await.unwrap();
+        assert_eq!(first["ui"]["mailbox"], "inbox");
+        assert_eq!(first["status"]["signed_in"], true);
+        assert!(!first["page"]["rows"].as_array().unwrap().is_empty());
+        assert!(first["thread"].is_null());
+
+        let thread = demo.thread("Dinner on Saturday").await;
+        let ui = json!({
+            "mailbox": "demo-home/inbox", "thread": thread, "selected": thread, "rows": 3, "list_offset": 120.5,
+            "search": "dinner", "compose": { "draft": { "text": "hello" } }, "sidebar": true, "unfolded": ["m1"],
+        });
+        demo.call(json!({ "type": "save_ui", "ui": ui })).await.unwrap();
+        let boot = demo.call(json!({ "type": "boot" })).await.unwrap();
+        assert_eq!(boot["ui"]["mailbox"], "demo-home/inbox");
+        assert_eq!(boot["ui"]["list_offset"], 120.5);
+        assert_eq!(boot["ui"]["compose"]["draft"]["text"], "hello");
+        assert_eq!(boot["ui"]["unfolded"], json!(["m1"]));
+        assert_eq!(boot["ui"]["filter"], Value::Null, "what wasn't saved has its default");
+        assert!(boot["page"]["rows"].as_array().unwrap().iter().all(|row| row["account_id"] == "demo-home"));
+        assert_eq!(boot["thread"]["id"], thread.as_str());
+        assert!(boot["search"].as_array().unwrap().iter().any(|row| row["id"] == thread.as_str()));
+        assert!(!boot["preferences"]["values"].as_array().unwrap().is_empty());
+
+        demo.call(json!({ "type": "save_ui", "ui": { "thread": "gone" } })).await.unwrap();
+        let boot = demo.call(json!({ "type": "boot" })).await.unwrap();
+        assert!(boot["thread"].is_null(), "a thread that is gone is left closed");
+        assert!(boot["search"].is_null());
+
+        demo.call(json!({ "type": "sign_out" })).await.unwrap();
+        let boot = demo.call(json!({ "type": "boot" })).await.unwrap();
+        assert_eq!(boot["status"]["signed_in"], false);
+        assert_eq!(boot["ui"]["thread"], Value::Null, "signing out forgets where the app was");
     }
 
     #[tokio::test]

@@ -296,7 +296,7 @@ impl Store {
         if meta("schema").as_deref() == Some(SCHEMA_VERSION) {
             return Ok(Self { db, path: path.to_path_buf() });
         }
-        let kept: Vec<(&str, String)> = ["server", "server_chosen", "token"]
+        let kept: Vec<(&str, String)> = ["server", "server_chosen", "token", "ui"]
             .into_iter()
             .filter_map(|key| meta(key).map(|value| (key, value)))
             .collect();

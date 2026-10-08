@@ -347,6 +347,33 @@ struct Status: Codable {
     let accounts: [StatusAccount]
 }
 
+/// Where the app is, kept by the core so the next start shows the same screen.
+struct UiState: Codable {
+    var mailbox = "inbox"
+    var filter: Filter?
+    var thread: String?
+    var selected: String?
+    var rows = 0
+    var listOffset: Double = 0
+    var search = ""
+    var compose: Compose?
+    var sidebar = false
+    var unfolded: [String] = []
+    var focused: String?
+    var images = false
+}
+
+/// The answer to `boot`: everything the first frame shows, as the app was left.
+struct Boot: Codable {
+    let status: Status
+    let mailboxes: Mailboxes
+    let page: ThreadPage
+    let thread: Conversation?
+    let search: [ThreadRow]?
+    let preferences: PreferenceList
+    let ui: UiState
+}
+
 struct SendReply: Codable {
     let opId: String
     let sendAt: Int64
@@ -420,7 +447,7 @@ enum Action: String {
 }
 
 /// What a list can be narrowed to.
-enum Filter: String {
+enum Filter: String, Codable {
     case unread, starred
 }
 

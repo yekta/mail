@@ -40,6 +40,65 @@ pub struct Config {
     pub demo: bool,
 }
 
+/// Where the app is, kept on this device so the next start shows the same screen. Every field
+/// has a default, so a state written by an older app still reads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiState {
+    pub mailbox: String,
+    pub filter: Option<Filter>,
+    /// The thread open on screen.
+    pub thread: Option<String>,
+    /// The row the keyboard is on.
+    pub selected: Option<String>,
+    /// How many rows the list had loaded, to load as many again.
+    pub rows: usize,
+    /// How far the list was scrolled, in points.
+    pub list_offset: f64,
+    pub search: String,
+    /// The compose sheet as the app keeps it, with what was typed.
+    pub compose: Option<Value>,
+    pub sidebar: bool,
+    /// The open thread's messages unfolded by hand, and the one the keyboard is on.
+    pub unfolded: Vec<String>,
+    pub focused: Option<String>,
+    /// Remote images were allowed in the open thread.
+    pub images: bool,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        Self {
+            mailbox: "inbox".into(),
+            filter: None,
+            thread: None,
+            selected: None,
+            rows: 0,
+            list_offset: 0.0,
+            search: String::new(),
+            compose: None,
+            sidebar: false,
+            unfolded: Vec::new(),
+            focused: None,
+            images: false,
+        }
+    }
+}
+
+/// The answer to `Boot`: the `Status`, the `Mailboxes`, the `ThreadPage` of the saved mailbox,
+/// the saved thread's `ThreadView` when it is still there, the local matches of the saved
+/// search, the `Preferences` and the saved state itself.
+#[derive(Debug, Clone, Serialize)]
+pub struct Boot {
+    pub status: Value,
+    pub mailboxes: Value,
+    pub page: ThreadPage,
+    pub thread: Option<Value>,
+    pub search: Option<Vec<ThreadRow>>,
+    pub preferences: Preferences,
+    pub ui: UiState,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Envelope {
     pub id: u64,
@@ -88,6 +147,12 @@ pub enum Filter {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
     Status,
+    /// A `Boot`: everything the app's first frame needs, in the state it was closed in.
+    Boot,
+    /// Keeps where the app is, to come back to it at the next start. `{}`.
+    SaveUi {
+        ui: UiState,
+    },
     SetServer {
         url: String,
     },
