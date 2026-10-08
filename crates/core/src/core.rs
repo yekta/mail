@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow, bail};
 use chrono::Local;
@@ -38,6 +38,8 @@ pub type Sink = Arc<dyn Fn(Event) + Send + Sync>;
 const PREFETCH: usize = 200;
 /// How many body requests wait on the server at once, besides those of the thread being opened.
 const BODIES_IN_FLIGHT: usize = 4;
+/// How long a body the server failed to fetch twice is shown as failed before it is asked again.
+const BODY_RETRY: Duration = Duration::from_secs(30);
 /// How many messages of a batch are applied in one step.
 const STEP: usize = 100;
 /// How often `Changed` is sent at most while the server streams.
@@ -124,6 +126,7 @@ pub fn start(config: Config, sink: Sink) -> Result<Handle> {
         pending: Touched::default(),
         flush_due: false,
         bodies_in_flight: HashSet::new(),
+        body_failures: HashMap::new(),
         soon: VecDeque::new(),
         later: VecDeque::new(),
         searches: HashMap::new(),
@@ -184,6 +187,8 @@ struct Core {
     pending: Touched,
     flush_due: bool,
     bodies_in_flight: HashSet<String>,
+    /// The bodies the server failed to fetch: how many times in a row, and when last.
+    body_failures: HashMap<String, (u32, Instant)>,
     /// Bodies to ask for: of threads about to be opened, then of the inbox's newest mail.
     soon: VecDeque<String>,
     later: VecDeque<String>,
@@ -472,6 +477,7 @@ impl Core {
         self.store.clear()?;
         self.backlog.clear();
         self.bodies_in_flight.clear();
+        self.body_failures.clear();
         self.soon.clear();
         self.later.clear();
         self.undo.clear();
@@ -581,7 +587,8 @@ impl Core {
             people.extend(message.recipients.to.iter().cloned());
             people.extend(message.recipients.cc.iter().cloned());
             let page = self.store.body(&message.id).map(|body| html::page(&body, images));
-            if page.is_none() {
+            let failed = page.is_none() && self.body_failed_lately(&message.id);
+            if page.is_none() && !failed {
                 missing.push(message.id.clone());
             }
             let to: Vec<String> = message
@@ -609,6 +616,7 @@ impl Core {
                 folded: index + 1 < messages.len() && !message.unread,
                 blocked_images: page.as_ref().is_some_and(|page| page.blocked_images),
                 html: page.map(|page| page.html),
+                failed,
                 attachments: message
                     .attachments
                     .iter()
@@ -704,12 +712,34 @@ impl Core {
         }
         while self.bodies_in_flight.len() < BODIES_IN_FLIGHT {
             let Some(id) = self.soon.pop_front().or_else(|| self.later.pop_front()) else { break };
-            if self.store.body(&id).is_some() || !self.bodies_in_flight.insert(id.clone()) {
+            if self.store.body(&id).is_some()
+                || self.body_failed_lately(&id)
+                || !self.bodies_in_flight.insert(id.clone())
+            {
                 continue;
             }
             self.next_request += 1;
             self.send(ClientMessage::Body { request: self.next_request, message_id: id });
         }
+    }
+
+    /// A body the server failed to fetch is asked for again at once; failing again, it shows as
+    /// failed for a while.
+    fn body_failed(&mut self, id: String) {
+        let (count, at) = self.body_failures.entry(id.clone()).or_insert((0, Instant::now()));
+        *count += 1;
+        *at = Instant::now();
+        if *count < 2 {
+            self.fetch_bodies_now(&[id]);
+            return;
+        }
+        if let Some(thread) = self.store.thread_of_message(&id) {
+            self.changed(Touched { threads: HashSet::from([thread]), ..Default::default() });
+        }
+    }
+
+    fn body_failed_lately(&self, id: &str) -> bool {
+        self.body_failures.get(id).is_some_and(|(count, at)| *count >= 2 && at.elapsed() < BODY_RETRY)
     }
 
     // ---------- ops ----------
@@ -1324,14 +1354,18 @@ impl Core {
             ServerMessage::Applied { op_id, ok, error } => self.applied(&op_id, ok, error),
             ServerMessage::Body { message_id, body, .. } => {
                 self.bodies_in_flight.remove(&message_id);
-                if let Some(body) = body {
-                    match self.store.save_body(&message_id, &body) {
-                        Ok(Some(thread)) => {
-                            self.changed(Touched { threads: HashSet::from([thread]), ..Default::default() })
-                        }
-                        Ok(None) => {}
-                        Err(error) => tracing::warn!("couldn't keep a body: {error:#}"),
+                let Some(body) = body else {
+                    self.body_failed(message_id);
+                    self.pump_bodies();
+                    return;
+                };
+                self.body_failures.remove(&message_id);
+                match self.store.save_body(&message_id, &body) {
+                    Ok(Some(thread)) => {
+                        self.changed(Touched { threads: HashSet::from([thread]), ..Default::default() })
                     }
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!("couldn't keep a body: {error:#}"),
                 }
                 self.pump_bodies();
             }

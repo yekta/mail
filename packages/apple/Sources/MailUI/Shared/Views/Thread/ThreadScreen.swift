@@ -269,6 +269,10 @@ struct MessageCard: View {
                 Group {
                     if let html = message.html {
                         MessageWebView(html: html)
+                    } else if message.failed {
+                        Text("This message couldn't be loaded. Open the conversation again to retry.")
+                            .font(.ui(14))
+                            .foregroundStyle(Tokens.mutedForeground.color)
                     } else {
                         Text(message.snippet)
                             .font(.ui(14))

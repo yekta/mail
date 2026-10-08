@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::db::{self, AccountRow, MessageRow};
 use crate::mime;
-use crate::providers::{Batch, Connection, Reauth, Refused};
+use crate::providers::{Batch, Connection, Reauth, Refused, gmail};
 
 const PREFETCH: i64 = 100;
 const MAX_ATTEMPTS: i32 = 5;
@@ -25,6 +25,7 @@ const DAILY: Duration = Duration::from_secs(24 * 60 * 60);
 #[derive(Default)]
 pub struct Workers {
     running: Mutex<HashMap<Uuid, Running>>,
+    quotas: Mutex<HashMap<Uuid, gmail::Quota>>,
 }
 
 struct Running {
@@ -64,6 +65,7 @@ impl Workers {
         if let Some(worker) = self.running.lock().unwrap().remove(&account_id) {
             worker.task.abort();
         }
+        self.quotas.lock().unwrap().remove(&account_id);
     }
 
     pub fn stop_all(&self) {
@@ -81,6 +83,11 @@ impl Workers {
     pub fn connection(&self, account_id: Uuid) -> Option<Connection> {
         let running = self.running.lock().unwrap();
         running.get(&account_id).and_then(|worker| worker.connection.lock().unwrap().clone())
+    }
+
+    /// The account's Gmail quota, which every connection to it spends from.
+    pub fn quota(&self, account_id: Uuid) -> gmail::Quota {
+        self.quotas.lock().unwrap().entry(account_id).or_default().clone()
     }
 
     /// The account's connection, opened now if its worker hasn't one (or runs elsewhere).
@@ -152,10 +159,11 @@ async fn work(
         }
         create_labels(state, &account, connection).await?;
         flush_ops(state, &account, connection).await?;
-        let synced = connection.sync(state, &account).await?;
+        let background = connection.background();
+        let synced = background.sync(state, &account).await?;
         db::set_account_status(&state.db, &account, "ready").await?;
         *backoff = Duration::from_secs(2);
-        prefetch(state, &account, connection).await;
+        prefetch(state, &account, &background).await;
         let wait = if synced.backfilling { Duration::from_secs(2) } else { state.config.poll_interval };
         let _ = tokio::time::timeout(wait, wake.notified()).await;
     }
