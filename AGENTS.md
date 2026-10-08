@@ -161,8 +161,8 @@ from the apps' tokens. The screenshots come from `docs/screenshots`; the favicon
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MailUI/Shared`.
 - A button, a field or a toast in the apps comes from `Shared/Views/UI`. A view does not style
-  a control by hand; what is missing is added to the component. The rules (sizes, hover,
-  pending, sheets, errors) are in `packages/apple/DESIGN.md`.
+  a control by hand; what is missing is added to the component. The rules (sizes, spacing,
+  hover, pending, sheets, errors) are in `packages/apple/DESIGN.md`.
 - Colours come from `packages/theme/tokens.json`, never a hex value in a view. Text sizes come
   from `TextStyle`, distances from `Space`.
 - The server holds people's mail. Credentials are sealed, tokens hashed, and a sign-in code
