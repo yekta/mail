@@ -31,6 +31,11 @@ enum Platform {
         #endif
     }
 
+    /// The app's version, as its bundle says.
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
     /// Where the core keeps its database.
     static var dataFolder: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

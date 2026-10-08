@@ -32,6 +32,9 @@ struct Compose: Identifiable {
 @Observable @MainActor
 public final class MailStore {
     let bridge = CoreBridge()
+    #if os(macOS)
+    let updater = AppUpdater()
+    #endif
 
     var started = false
     var signedIn = false
@@ -147,6 +150,9 @@ public final class MailStore {
             return
         }
         Outgoing.prune()
+        #if os(macOS)
+        if !demo { updater.start() }
+        #endif
         Task {
             await refresh()
             await loadPreferences()
