@@ -84,7 +84,8 @@ struct ButtonIcon: View {
 
 /// A button with words. `primary` is filled, `outline` is Newton's pill (Compose), `ghost` is
 /// words alone, `destructive` a pill in red. `pending` shows the spinner where the icon goes
-/// and ignores clicks until it is over.
+/// and ignores clicks until it is over. Half of `Theme.buttonGap` on each side keeps it off
+/// its neighbours while the hit areas touch.
 struct ActionButton: View {
     enum Variant {
         case primary, outline, ghost, destructive
@@ -124,7 +125,8 @@ struct ActionButton: View {
             .frame(height: size.height * Platform.scale)
             .background(Capsule().fill(background))
             .overlay(Capsule().strokeBorder(border, lineWidth: Theme.hairline))
-            .contentShape(Capsule())
+            .padding(.horizontal, Theme.buttonGap / 2)
+            .contentShape(Rectangle())
         }
 
         private var foreground: Color {
@@ -220,7 +222,7 @@ struct IconMenu<Content: View>: View {
     }
 }
 
-/// The face of an icon button and an icon menu.
+/// The face of an icon button and an icon menu, with half of `Theme.buttonGap` on each side.
 struct IconCircle: View {
     let symbol: Symbol
     var size: ControlSize = .regular
@@ -235,7 +237,8 @@ struct IconCircle: View {
             .frame(width: size.height * Platform.scale, height: size.height * Platform.scale)
             .background(Circle().fill(hovered ? Tokens.accentStronger.color : .clear))
             .overlay(Circle().strokeBorder(circled ? Tokens.border.color : .clear, lineWidth: Theme.hairline))
-            .contentShape(Circle())
+            .padding(.horizontal, Theme.buttonGap / 2)
+            .contentShape(Rectangle())
     }
 
     private var tint: Color {

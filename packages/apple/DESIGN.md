@@ -23,7 +23,10 @@ added to the component, not to the view.
   row hovers in `accent`. A control with a colour of its own (the star) hovers in a wash of
   it: the colour at `colorTintOpacity`, lighter in the dark scheme.
 - Things side by side have no gap between them: an `HStack(spacing: 0)` of buttons, rows with
-  no spacing. The space is inside each control, so hover areas and hit areas touch.
+  no spacing. The space is inside each control, so hover areas and hit areas touch. Buttons
+  with a face (a circle, a pill) show `Theme.buttonGap` (2pt) between the faces; each button
+  pads half of it inside its hit area, and its hit shape is the whole rectangle. The gap is
+  only drawn, never dead: a view never adds spacing between buttons.
 - Every button can carry an icon and has a `pending` state; while pending, the spinner stands
   where the icon goes and the button waits.
 - Everything is shown as soon as it is known; what is being fetched again is shown quietly

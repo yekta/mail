@@ -63,6 +63,9 @@ enum Theme {
     static let cardRadius = Tokens.radius + 2
     /// A hairline: a rule, a border.
     static let hairline: CGFloat = 1
+    /// Between the faces of buttons side by side. Each button pads half of it inside its hit
+    /// area, so the gap is only drawn: hit areas still touch.
+    static let buttonGap: CGFloat = 2
 
     /// A text field, as tall as the regular control.
     static let fieldHeight: CGFloat = ControlSize.regular.height
