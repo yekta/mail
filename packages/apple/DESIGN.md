@@ -63,6 +63,7 @@ added to the component, not to the view.
 | `EmptyState` | An icon and a calm line for an empty list |
 | `Banner`, `ToastView` | A line across the window that stays, and the note at the bottom that goes |
 | `Avatar` | Initials in a circle of the address's colour |
+| `SwatchRow` | The account colours on a line, to pick one |
 | `Rule`, `.rule(edge)` | A hairline, in `border` or in `cardBorder` |
 | `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page on the Mac |
 | `FlowLayout` | Wrapping layout for chips |

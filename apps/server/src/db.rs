@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use mail_protocol::{
-    Account, Address, Attachment, Draft, Identity, Label, Message, MessageState, Op, Preference, Provider, Recipients,
-    SavedDraft, Unsubscribe,
+    ACCOUNT_COLORS, Account, Address, Attachment, Draft, Identity, Label, Message, MessageState, Op, Preference,
+    Provider, Recipients, SavedDraft, Unsubscribe,
 };
 use serde_json::{Value, json};
 use sqlx::types::Json;
@@ -16,18 +16,6 @@ use uuid::Uuid;
 
 pub const SIGN_IN_LIFETIME: Duration = Duration::minutes(10);
 pub const LINK_TICKET_LIFETIME: Duration = Duration::minutes(10);
-const ACCOUNT_COLORS: [&str; 10] = [
-    "account-1",
-    "account-2",
-    "account-3",
-    "account-4",
-    "account-5",
-    "account-6",
-    "account-7",
-    "account-8",
-    "account-9",
-    "account-10",
-];
 
 pub struct UserTx {
     pub tx: Transaction<'static, Postgres>,
@@ -311,6 +299,20 @@ pub async fn upsert_account(db: &PgPool, account: NewAccount<'_>) -> sqlx::Resul
     .await?;
     tx.commit().await?;
     Ok(id)
+}
+
+pub async fn set_account_color(db: &PgPool, user_id: Uuid, account_id: Uuid, color: &str) -> sqlx::Result<bool> {
+    let mut tx = UserTx::begin(db, user_id).await?;
+    let changed = sqlx::query(
+        "UPDATE accounts SET color = $3, rev = nextval('revs') WHERE id = $1 AND user_id = $2 AND NOT deleted",
+    )
+    .bind(account_id)
+    .bind(user_id)
+    .bind(color)
+    .execute(&mut *tx.tx)
+    .await?;
+    tx.commit().await?;
+    Ok(changed.rows_affected() > 0)
 }
 
 pub async fn set_account_status(db: &PgPool, account: &AccountRow, status: &str) -> sqlx::Result<()> {

@@ -56,6 +56,11 @@ pub enum Op {
     RemoveAccount {
         account_id: String,
     },
+    /// `color` is one of `ACCOUNT_COLORS`.
+    SetAccountColor {
+        account_id: String,
+        color: String,
+    },
     /// Leaves the list a message came from, by its one-click URL or its mailto address.
     Unsubscribe {
         id: String,
@@ -105,6 +110,7 @@ impl Op {
             Op::Send { .. }
             | Op::CancelSend { .. }
             | Op::RemoveAccount { .. }
+            | Op::SetAccountColor { .. }
             | Op::Unsubscribe { .. }
             | Op::SetPreference { .. }
             | Op::SaveDraft { .. }
@@ -143,6 +149,7 @@ impl Op {
             Op::Send { .. }
             | Op::CancelSend { .. }
             | Op::RemoveAccount { .. }
+            | Op::SetAccountColor { .. }
             | Op::Unsubscribe { .. }
             | Op::SetPreference { .. }
             | Op::SaveDraft { .. }

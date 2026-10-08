@@ -80,7 +80,7 @@ enum Theme {
     /// A thread row on iOS: sender, subject, snippet.
     static let iosRowHeight: CGFloat = 88
     /// The bar of the account's colour at the start of a thread row.
-    static let accountBarWidth: CGFloat = 3
+    static let accountBarWidth: CGFloat = 2
     /// The widest the list and the thread's card grow on the Mac.
     static let cardWidth: CGFloat = 1000
     static let sidebarWidth: CGFloat = 232
@@ -89,6 +89,9 @@ enum Theme {
         Tokens.account1, Tokens.account2, Tokens.account3, Tokens.account4, Tokens.account5,
         Tokens.account6, Tokens.account7, Tokens.account8, Tokens.account9, Tokens.account10,
     ]
+
+    /// The names the core knows the colours by, `account-1` to `account-10`.
+    static let accountColorNames = accountColors.indices.map { "account-\($0 + 1)" }
 
     /// An account's colour by the token name the core gives it, `account-1` to `account-10`.
     static func accountColor(_ name: String) -> ThemeColor {

@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use mail_protocol::{Draft, MessageState, Op};
+use mail_protocol::{ACCOUNT_COLORS, Draft, MessageState, Op};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -52,6 +52,7 @@ pub async fn apply(state: &AppState, user_id: Uuid, op_id: &str, op: Op) -> anyh
                 false => Outcome::failed("No such account."),
             }
         }
+        Op::SetAccountColor { account_id, color } => set_account_color(&state.db, user_id, &account_id, &color).await?,
         Op::Unsubscribe { id } => match unsubscribe::run(state, user_id, &id).await? {
             Ok(()) => Outcome::ok(),
             Err(error) => Outcome::failed(&error),
@@ -203,6 +204,19 @@ async fn change_messages(state: &AppState, user_id: Uuid, op: Op) -> anyhow::Res
         hub::notify_ops(&state.db, account_id).await;
     }
     Ok(Outcome::ok())
+}
+
+async fn set_account_color(db: &PgPool, user_id: Uuid, account_id: &str, color: &str) -> sqlx::Result<Outcome> {
+    let Ok(account_id) = account_id.parse::<Uuid>() else {
+        return Ok(Outcome::failed("No such account."));
+    };
+    if !ACCOUNT_COLORS.contains(&color) {
+        return Ok(Outcome::failed("No such colour."));
+    }
+    match db::set_account_color(db, user_id, account_id, color).await? {
+        true => Ok(Outcome::ok()),
+        false => Ok(Outcome::failed("No such account.")),
+    }
 }
 
 async fn set_preference(db: &PgPool, user_id: Uuid, key: &str, value: Option<&Value>) -> sqlx::Result<Outcome> {

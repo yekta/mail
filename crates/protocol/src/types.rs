@@ -10,6 +10,20 @@ pub mod role {
     pub const ALL: [&str; 5] = [INBOX, SENT, DRAFTS, TRASH, SPAM];
 }
 
+/// The theme colours an account can have, as the apps' tokens name them.
+pub const ACCOUNT_COLORS: [&str; 10] = [
+    "account-1",
+    "account-2",
+    "account-3",
+    "account-4",
+    "account-5",
+    "account-6",
+    "account-7",
+    "account-8",
+    "account-9",
+    "account-10",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {

@@ -17,6 +17,7 @@ struct SettingsView: View {
                             ItemRow(title: account.address, detail: status(account), dot: Theme.accountColor(account.color).color) {
                                 ActionButton(title: "Remove", variant: .destructive) { store.removeAccount(account.id) }
                             }
+                            SwatchRow(selected: account.color) { store.setAccountColor(account.id, $0) }
                         }
                         if adding {
                             Card { AddAccountForm() }
