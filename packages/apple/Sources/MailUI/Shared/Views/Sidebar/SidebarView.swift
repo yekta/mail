@@ -64,21 +64,12 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: Space.s + 2) {
-            PlainButton(action: showSettings) {
-                HStack(spacing: Space.s + 2) {
-                    Image(.settings, size: 15)
-                    Text("Settings").textStyle(.label)
-                }
-                .foregroundStyle(Tokens.foreground.color)
-            }
-            Spacer()
+        NavRow(title: "Settings", symbol: .settings, action: showSettings) {
             if store.connection == "offline" {
                 Image(.wifiOff, size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).help("Offline")
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 48)
+        .padding(.vertical, Space.xs + 2)
         .rule(.top)
     }
 }
