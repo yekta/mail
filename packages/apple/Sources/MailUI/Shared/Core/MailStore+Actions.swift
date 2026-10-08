@@ -150,6 +150,7 @@ extension MailStore {
         guard searchRows == nil else { return }
         var fields: [String: Any] = ["mailbox": mailbox]
         if let filter { fields["filter"] = filter.rawValue }
+        if let kept = keptRows { fields["keep"] = kept }
         let what = switch filter {
         case .unread: "every unread thread"
         case .starred: "every starred thread"

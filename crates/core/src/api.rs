@@ -1,8 +1,8 @@
 //! The JSON the apps and the core exchange: commands in, events out. Each command's answer is
 //! written beside it.
 //!
-//! Mailbox ids: `inbox`, `starred`, `snoozed`, `sent`, `drafts`, `archive`, `spam`, `trash` for
-//! every account together; `<account>/<mailbox>` for one account; `<account>/label/<label>` for a
+//! Mailbox ids: `inbox`, `unread`, `starred`, `snoozed`, `sent`, `drafts`, `archive`, `spam`,
+//! `trash` for every account together; `<account>/<mailbox>` for one account; `<account>/label/<label>` for a
 //! label. With Split Inbox on, an inbox's splits are `inbox:important`, `inbox:other` and
 //! `inbox:<split id>` (and `<account>/inbox:other`, ...); a thread is in one split only, and an
 //! inbox's own id shows Important.
@@ -189,7 +189,8 @@ pub enum Command {
     },
     /// `{unified: [Mailbox], accounts: [AccountView]}`.
     Mailboxes,
-    /// A `ThreadPage`.
+    /// A `ThreadPage`. `unread` is the inbox's unread threads, and those of `keep` still in the
+    /// inbox: the threads on screen, so one read there stays until the mailbox is left.
     Threads {
         mailbox: String,
         #[serde(default)]
@@ -198,6 +199,8 @@ pub enum Command {
         limit: usize,
         #[serde(default)]
         filter: Option<Filter>,
+        #[serde(default)]
+        keep: Vec<String>,
     },
     /// Fetches the bodies of these threads ahead of their opening, as the list scrolls past them
     /// or the keyboard moves near them. `{}`.
@@ -234,6 +237,9 @@ pub enum Command {
         before: Option<i64>,
         #[serde(default)]
         filter: Option<Filter>,
+        /// As `Threads`'s.
+        #[serde(default)]
+        keep: Vec<String>,
     },
     /// `{id}`: the new label's id, usable at once.
     CreateLabel {

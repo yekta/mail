@@ -101,7 +101,7 @@ struct TabSettings: View {
     @Environment(MailStore.self) private var store
 
     var body: some View {
-        let tabs = store.tabs
+        let tabs = store.savedTabs
         VStack(alignment: .leading, spacing: Space.s + 2) {
             if tabs.isEmpty {
                 Notice(text: "No tabs. Mailboxes are opened from the sidebar.")

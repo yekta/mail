@@ -65,7 +65,7 @@ fn apply(store: &mut Store, accounts: &[Account], messages: &[Message], cursor: 
 }
 
 fn page(store: &Store, mailbox: &str) -> ThreadPage {
-    store.thread_page(mailbox, 0, 50, None, &Utc::now()).unwrap()
+    store.thread_page(mailbox, 0, 50, None, &[], &Utc::now()).unwrap()
 }
 
 fn ids(page: &ThreadPage) -> Vec<&str> {
@@ -215,7 +215,7 @@ fn counts_and_filters_follow_every_change() {
         &[message("m1", "t1", "Ann", 1_000), message("m2", "t2", "Bob", 2_000), starred],
         1,
     );
-    let filtered = |store: &Store, filter| store.thread_page("a/inbox", 0, 50, Some(filter), &Utc::now()).unwrap();
+    let filtered = |store: &Store, filter| store.thread_page("a/inbox", 0, 50, Some(filter), &[], &Utc::now()).unwrap();
     assert_eq!(page(&store, "inbox").total, 3);
     assert_eq!(ids(&filtered(&store, Filter::Unread)), ["a:t2", "a:t1"]);
     assert_eq!(filtered(&store, Filter::Unread).total, 2);
@@ -228,10 +228,37 @@ fn counts_and_filters_follow_every_change() {
     assert_eq!(ids(&filtered(&store, Filter::Starred)), ["a:t3", "a:t2"]);
     assert_eq!(page(&store, "inbox").total, 2);
     assert_eq!(page(&store, "a/archive").total, 1);
-    assert_eq!(store.mailboxes().unwrap().0[1].unread, 0, "starred threads are all read");
+    let starred_box = store.mailboxes().unwrap().0.into_iter().find(|mailbox| mailbox.id == "starred").unwrap();
+    assert_eq!(starred_box.unread, 0, "starred threads are all read");
     store.settle("2", false).unwrap();
     assert_eq!(page(&store, "inbox").total, 3);
     assert_counts(&store);
+}
+
+#[test]
+fn unread_keeps_the_threads_read_while_it_is_on_screen_until_they_leave_the_inbox() {
+    let mut store = store();
+    let mut read = message("m3", "t3", "Cy", 3_000);
+    read.unread = false;
+    apply(&mut store, &[account()], &[message("m1", "t1", "Ann", 1_000), message("m2", "t2", "Bob", 2_000), read], 1);
+    let unread = |store: &Store, kept: &[&str]| {
+        let kept: Vec<String> = kept.iter().map(|id| id.to_string()).collect();
+        store.thread_page("a/unread", 0, 50, None, &kept, &Utc::now()).unwrap()
+    };
+    assert_eq!(ids(&unread(&store, &[])), ["a:t2", "a:t1"]);
+    assert_eq!(page(&store, "unread").total, 2);
+    let (unified, accounts) = store.mailboxes().unwrap();
+    assert_eq!(unified.iter().find(|mailbox| mailbox.id == "unread").unwrap().unread, 2);
+    assert_eq!(accounts[0].mailboxes.iter().find(|mailbox| mailbox.id == "a/unread").unwrap().unread, 2);
+
+    store.apply_local("1", &Op::SetUnread { ids: vec!["m2".into()], unread: false }).unwrap();
+    assert_eq!(ids(&unread(&store, &[])), ["a:t1"]);
+    let kept = unread(&store, &["a:t2", "a:t1"]);
+    assert_eq!((ids(&kept), kept.total), (vec!["a:t2", "a:t1"], 2));
+
+    store.apply_local("2", &Op::Archive { ids: vec!["m2".into()] }).unwrap();
+    assert_eq!(ids(&unread(&store, &["a:t2", "a:t1"])), ["a:t1"]);
+    assert_eq!(store.inbox_messages("a/unread", None, None, &["a:t3".into()]).unwrap(), ["m3", "m1"]);
 }
 
 #[test]
@@ -501,7 +528,7 @@ fn getting_to_zero_archives_what_the_mailbox_shows() {
     let mut read = message("m3", "t3", "Cy", 3_000);
     read.unread = false;
     apply(&mut store, &[account()], &[newsletter, message("m2", "t2", "Bob", 2_000), read], 1);
-    let archived = |store: &Store, mailbox: &str, filter| store.inbox_messages(mailbox, None, filter).unwrap();
+    let archived = |store: &Store, mailbox: &str, filter| store.inbox_messages(mailbox, None, filter, &[]).unwrap();
     assert_eq!(archived(&store, "inbox", None), ["m3", "m2", "m1"]);
     assert_eq!(archived(&store, "inbox", Some(Filter::Unread)), ["m2", "m1"]);
     set(&mut store, "split_inbox", json!(true));
@@ -610,19 +637,21 @@ fn fill_and_time(messages_count: usize, accounts_count: usize) -> Vec<(&'static 
     let now = Utc::now();
     let mut timings = vec![("fill", filled), ("turn the splits on", resplit)];
     timings.push(("mailboxes", time(&|| drop(store.mailboxes().unwrap()))));
-    timings.push(("inbox, first page", time(&|| drop(store.thread_page("inbox", 0, 100, None, &now).unwrap()))));
-    timings.push(("inbox, page 50", time(&|| drop(store.thread_page("inbox", 5_000, 100, None, &now).unwrap()))));
-    timings
-        .push(("one account's archive", time(&|| drop(store.thread_page("a1/archive", 0, 100, None, &now).unwrap()))));
+    timings.push(("inbox, first page", time(&|| drop(store.thread_page("inbox", 0, 100, None, &[], &now).unwrap()))));
+    timings.push(("inbox, page 50", time(&|| drop(store.thread_page("inbox", 5_000, 100, None, &[], &now).unwrap()))));
+    timings.push((
+        "one account's archive",
+        time(&|| drop(store.thread_page("a1/archive", 0, 100, None, &[], &now).unwrap())),
+    ));
     timings.push((
         "unread filter",
-        time(&|| drop(store.thread_page("inbox", 0, 100, Some(Filter::Unread), &now).unwrap())),
+        time(&|| drop(store.thread_page("inbox", 0, 100, Some(Filter::Unread), &[], &now).unwrap())),
     ));
     timings.push((
         "starred filter",
-        time(&|| drop(store.thread_page("inbox", 0, 100, Some(Filter::Starred), &now).unwrap())),
+        time(&|| drop(store.thread_page("inbox", 0, 100, Some(Filter::Starred), &[], &now).unwrap())),
     ));
-    timings.push(("split", time(&|| drop(store.thread_page("inbox:important", 0, 100, None, &now).unwrap()))));
+    timings.push(("split", time(&|| drop(store.thread_page("inbox:important", 0, 100, None, &[], &now).unwrap()))));
     timings.push(("contacts", time(&|| drop(store.contacts("p1", 8).unwrap()))));
     timings.push(("person", time(&|| drop(store.person("p1@x.com", &now).unwrap()))));
     timings.push(("search, common word", time(&|| drop(store.search("budget", &now).unwrap()))));

@@ -73,6 +73,7 @@ enum Symbol: String {
     static func named(_ name: String) -> Symbol {
         switch name {
         case "inbox": .inbox
+        case "mail": .mail
         case "star": .star
         case "clock": .clock
         case "send": .send

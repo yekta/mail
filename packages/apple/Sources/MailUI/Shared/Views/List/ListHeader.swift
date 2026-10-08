@@ -45,7 +45,7 @@ struct EmptyList: View {
 
     private var message: String {
         if store.searchRows != nil { return "Nothing matches." }
-        if store.filter == .unread { return "Nothing unread." }
+        if store.filter == .unread || store.inUnread { return "Nothing unread." }
         if store.filter == .starred { return "Nothing starred." }
         if store.connection == "connecting" && store.accounts.isEmpty { return "Syncing…" }
         return store.baseMailbox.hasSuffix("inbox") ? "All done. Enjoy the quiet." : "Nothing here."

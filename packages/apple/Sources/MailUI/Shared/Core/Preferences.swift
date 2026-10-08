@@ -69,9 +69,11 @@ extension Address {
 }
 
 /// The mailboxes shown as tabs over the list, `tabs`: their ids in order. Unset, the usual four.
+/// A mailbox of every account together (`inbox`) is the account's own while one account's
+/// mailbox is on screen.
 enum TabPreference {
     static let key = "tabs"
-    static let standard = ["inbox", "sent", "starred", "snoozed"]
+    static let standard = ["inbox", "unread", "sent", "snoozed"]
 
     static func ids(in preferences: [String: JSONValue]) -> [String] {
         guard case .array(let values) = preferences[key] else { return standard }

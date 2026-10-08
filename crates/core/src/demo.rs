@@ -454,7 +454,7 @@ mod tests {
         fill(&mut store, mail_protocol::now_ms()).unwrap();
         fill(&mut store, mail_protocol::now_ms()).unwrap();
 
-        let page = |mailbox: &str| store.thread_page(mailbox, 0, 100, None, &Utc::now()).unwrap();
+        let page = |mailbox: &str| store.thread_page(mailbox, 0, 100, None, &[], &Utc::now()).unwrap();
         let count = |mailbox: &str| page(mailbox).total;
         assert_eq!(count("inbox"), 6, "a split inbox shows Important");
         let splits: Vec<(String, u32)> = page("inbox").splits.into_iter().map(|tab| (tab.name, tab.total)).collect();
