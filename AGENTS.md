@@ -134,8 +134,9 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
   `ThreadListMac.swift` (an `NSTableView`), `AppUpdater.swift` (finds the latest GitHub release,
   downloads and installs it when asked) and `UpdateRow.swift` (the update at the foot of the
   sidebar: the offer, the download, the restart).
-- `iOS/`: `MailIOSApp.swift` (the navigation stack) and `ThreadListIOS.swift` (a `UITableView`
-  with the swipes).
+- `iOS/`: `MailIOSApp.swift` (the navigation stack, with the tabs along the bottom),
+  `Drawer.swift` (the sidebar a swipe to the right opens) and `ThreadListIOS.swift` (a
+  `UITableView` with the swipes).
 
 ### apps/marketing (Astro, Tailwind)
 
