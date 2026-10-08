@@ -34,6 +34,7 @@ struct GalleryView: View {
                         Text("Label strong").textStyle(.labelStrong)
                         Text("Caption").textStyle(.caption)
                         Text("Footnote").textStyle(.footnote)
+                        Text("Footnote strong").textStyle(.footnoteStrong)
                         Text("OVERLINE").textStyle(.overline)
                         Text("⌘K  mono").textStyle(.mono)
                     }
