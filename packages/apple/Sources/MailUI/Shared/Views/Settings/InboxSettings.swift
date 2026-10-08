@@ -148,3 +148,19 @@ struct NotificationSettings: View {
         }
     }
 }
+
+/// Whether the images a message loads from the web are shown without asking.
+struct ImageSettings: View {
+    @Environment(MailStore.self) private var store
+
+    var body: some View {
+        ToggleRow(
+            title: "Load remote images",
+            detail: "Off, pictures hosted by the sender wait until you ask for them, so nobody learns when you read their mail.",
+            isOn: Binding(
+                get: { store.preferences["remote_images"]?.bool ?? true },
+                set: { store.setPreference("remote_images", $0 ? nil : .bool(false)) }
+            )
+        )
+    }
+}

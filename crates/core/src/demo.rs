@@ -378,7 +378,7 @@ pub fn fill(store: &mut Store, now: i64) -> Result<()> {
                 rev: 1,
             });
             let body = match thread.designed {
-                Some(colour) => Body { html: Some(designed(thread.with.0, colour, thread.subject, text)), text: None },
+                Some(colour) => Body { html: Some(designed(thread.with, colour, thread.subject, text)), text: None },
                 None => Body { html: None, text: Some(format!("{text}\n\n{}", from_name(*mine, thread.with.0))) },
             };
             bodies.push((id, body));
@@ -423,9 +423,13 @@ fn from_name(mine: bool, them: &str) -> &str {
     if mine { "Sam" } else { them.split(' ').next().unwrap_or(them) }
 }
 
-fn designed(brand: &str, colour: &str, headline: &str, text: &str) -> String {
+/// A newsletter as senders make them: a table, their colours, and the open-tracking pixel from
+/// their domain that the `remote_images` preference keeps out.
+fn designed((brand, address): (&str, &str), colour: &str, headline: &str, text: &str) -> String {
+    let domain = address.rsplit('@').next().unwrap_or_default();
     format!(
         r##"<html><body style="margin:0;background:#f4f4f5">
+<img src="https://{domain}/open.gif" width="1" height="1" alt="">
 <table width="100%" cellpadding="0" cellspacing="0" bgcolor="#f4f4f5"><tr><td align="center" style="padding:24px">
 <table width="560" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-radius:8px">
 <tr><td style="padding:32px;font-family:Helvetica,Arial,sans-serif;color:#222">
