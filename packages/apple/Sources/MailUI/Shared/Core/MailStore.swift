@@ -188,6 +188,7 @@ public final class MailStore {
         if !demo { updater.start() }
         #endif
         saveWhenLeaving()
+        WebViewPool.shared.warm()
         Task { await boot() }
     }
 
