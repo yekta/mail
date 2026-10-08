@@ -25,8 +25,9 @@ enum SheetSize {
 }
 
 /// What every sheet is made of: its title, a way to close it, and its content. On iOS the title
-/// and the close are the navigation bar's, as the system draws them; on the Mac a header bar
-/// of ours, closed with Esc. `trailing` goes in the bar at its end.
+/// and the close are the navigation bar's, as the system draws them: the bar fades into the
+/// content and Close is the X at its end; a Cancel stays a word at its start. On the Mac a
+/// header bar of ours, closed with Esc. `trailing` goes in the bar at its end.
 struct Sheet<Content: View, Trailing: View>: View {
     @Environment(\.dismiss) private var dismiss
     let title: String
@@ -58,10 +59,15 @@ struct Sheet<Content: View, Trailing: View>: View {
                 .background(background.color)
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(background.color, for: .navigationBar)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(close) { dismiss() }
+                    if #available(iOS 26, *), close == "Close" {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(role: .close) { dismiss() }
+                        }
+                    } else {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(close) { dismiss() }
+                        }
                     }
                     ToolbarItem(placement: .primaryAction) { trailing }
                 }
