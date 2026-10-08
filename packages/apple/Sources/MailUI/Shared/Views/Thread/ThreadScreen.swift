@@ -256,7 +256,7 @@ struct MessageCard: View {
             if !folded {
                 Group {
                     if let html = message.html {
-                        MessageWebView(html: html, original: original)
+                        MessageWebView(message: message.id, html: html, original: original, kept: store.bodyHeights[message.id])
                     } else if message.failed {
                         Text("This message couldn't be loaded. Open the conversation again to retry.")
                             .textStyle(.body, color: Tokens.mutedMoreForeground.color)

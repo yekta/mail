@@ -49,8 +49,20 @@ final class WebViewPool {
         give(take())
     }
 
-    func take() -> MessageWKWebView {
-        if let view = spare.popLast() { return view }
+    /// Loads these pages into spare views ahead of their cards, so they are parsed by the time
+    /// the cards take them.
+    func preload(_ pages: [String]) {
+        for html in pages.prefix(8) {
+            let view = take()
+            view.show(html)
+            spare.append(view)
+        }
+    }
+
+    /// A spare view: the one already showing `html` when there is one, else an empty one.
+    func take(_ html: String? = nil) -> MessageWKWebView {
+        let index = spare.lastIndex { $0.loaded == html } ?? spare.lastIndex { $0.loaded == nil } ?? spare.indices.last
+        if let index { return spare.remove(at: index) }
         let view = MessageWKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = view
         #if os(macOS)
@@ -121,14 +133,42 @@ final class MessageWKWebView: WKWebView, WKNavigationDelegate {
     #endif
 }
 
-/// A message body, as tall as its page. `original` shows a designed mail as its sender made it.
+/// A message body, as tall as its page. It opens at the height the store kept for it, when
+/// it was last measured at this width, so the thread is laid out before the page is.
+/// `original` shows a designed mail as its sender made it.
 struct MessageWebView: View {
+    @Environment(MailStore.self) private var store
+    let message: String
     let html: String
     var original = false
-    @State private var height: CGFloat = 40
+    @State private var height: CGFloat
+    @State private var measured = false
+
+    init(message: String, html: String, original: Bool = false, kept: CGFloat? = nil) {
+        self.message = message
+        self.html = html
+        self.original = original
+        _height = State(initialValue: kept ?? 40)
+    }
 
     var body: some View {
-        WebRepresentable(html: html, original: original, height: $height).frame(height: height)
+        WebRepresentable(html: html, original: original, height: $height) { width, reported in
+            measured = true
+            store.noteBodyHeight(message, width: width, height: reported)
+        }
+        .frame(height: height)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.onAppear { restore(width: geometry.size.width) }
+            }
+        }
+    }
+
+    /// The kept height was measured at one width; at another it is no guide, and the card
+    /// starts small until its page reports.
+    private func restore(width: CGFloat) {
+        guard !measured else { return }
+        height = store.bodyHeight(message, width: width) ?? 40
     }
 }
 
@@ -137,11 +177,15 @@ private struct WebRepresentable: NSViewRepresentable {
     let html: String
     let original: Bool
     @Binding var height: CGFloat
+    let reported: (CGFloat, CGFloat) -> Void
 
     func makeNSView(context: Context) -> MessageWKWebView {
-        let view = WebViewPool.shared.take()
-        view.onHeight = { reported in
-            DispatchQueue.main.async { if abs(height - reported) > 0.5 { height = max(reported, 20) } }
+        let view = WebViewPool.shared.take(html)
+        view.onHeight = { [weak view] measured in
+            DispatchQueue.main.async {
+                reported(view?.bounds.width ?? 0, measured)
+                if abs(height - measured) > 0.5 { height = max(measured, 20) }
+            }
         }
         view.original = original
         view.show(html)
@@ -162,11 +206,15 @@ private struct WebRepresentable: UIViewRepresentable {
     let html: String
     let original: Bool
     @Binding var height: CGFloat
+    let reported: (CGFloat, CGFloat) -> Void
 
     func makeUIView(context: Context) -> MessageWKWebView {
-        let view = WebViewPool.shared.take()
-        view.onHeight = { reported in
-            DispatchQueue.main.async { if abs(height - reported) > 0.5 { height = max(reported, 20) } }
+        let view = WebViewPool.shared.take(html)
+        view.onHeight = { [weak view] measured in
+            DispatchQueue.main.async {
+                reported(view?.bounds.width ?? 0, measured)
+                if abs(height - measured) > 0.5 { height = max(measured, 20) }
+            }
         }
         view.original = original
         view.show(html)
