@@ -416,6 +416,8 @@ pub struct MessageView {
     pub folded: bool,
     /// The page to show, or none while the body is on its way.
     pub html: Option<String>,
+    /// The server couldn't fetch the body; opening the thread again later asks again.
+    pub failed: bool,
     pub blocked_images: bool,
     /// Open one with `OpenAttachment` and its place in this list.
     pub attachments: Vec<Attachment>,

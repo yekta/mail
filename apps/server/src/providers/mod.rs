@@ -64,12 +64,20 @@ impl Connection {
         };
         let secret = String::from_utf8(secret).unwrap_or_default();
         Ok(match account.provider() {
-            Provider::Gmail => Connection::Gmail(gmail::Gmail::open(state, &secret).await?),
+            Provider::Gmail => Connection::Gmail(gmail::Gmail::open(state, account, &secret).await?),
             Provider::Jmap => {
                 let login: jmap::Login = serde_json::from_str(&account.login)?;
                 Connection::Jmap(jmap::Jmap::open(&state.http, &login.url, &login.username, &secret).await?)
             }
         })
+    }
+
+    /// The same connection for the worker's own requests, which give way to those someone waits for.
+    pub fn background(&self) -> Self {
+        match self {
+            Connection::Gmail(gmail) => Connection::Gmail(gmail.background()),
+            Connection::Jmap(jmap) => Connection::Jmap(jmap.clone()),
+        }
     }
 
     pub async fn sync(&self, state: &AppState, account: &AccountRow) -> anyhow::Result<Synced> {

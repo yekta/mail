@@ -12,6 +12,8 @@ struct ThreadListMac: NSViewRepresentable {
     let selected: String?
     let checked: Set<String>
     let topInset: CGFloat
+    /// False under an open thread: the list keeps its place, and gives up the keyboard.
+    let shown: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store) }
 
@@ -36,7 +38,7 @@ struct ThreadListMac: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.automaticallyAdjustsContentInsets = false
-        scroll.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
+        pad(scroll)
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(
             context.coordinator, selector: #selector(Coordinator.scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView
@@ -46,11 +48,19 @@ struct ThreadListMac: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        if scroll.contentInsets.top != topInset {
-            scroll.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
-        }
+        if scroll.contentInsets.top != topInset { pad(scroll) }
+        if scroll.isHidden == shown { scroll.isHidden = !shown }
         context.coordinator.update(rows: rows, selected: selected, checked: checked)
     }
+
+    /// Pads the rows, not the scroll view, so the padding scrolls with them and the scroller
+    /// runs the full height.
+    private func pad(_ scroll: NSScrollView) {
+        scroll.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: Self.bottomInset, right: 0)
+        scroll.scrollerInsets = NSEdgeInsets(top: -topInset, left: 0, bottom: -Self.bottomInset, right: 0)
+    }
+
+    private static let bottomInset: CGFloat = 16
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
@@ -65,6 +75,8 @@ struct ThreadListMac: NSViewRepresentable {
         private var selected: String?
         private var checked: Set<String> = []
         private var prefetch: DispatchWorkItem?
+        /// The row last clicked: it is where the pointer is, so the list doesn't move to show it.
+        private var clickedRow: String?
 
         init(store: MailStore) {
             self.store = store
@@ -93,9 +105,11 @@ struct ThreadListMac: NSViewRepresentable {
                     view.isChecked = checked.contains(id)
                 }
             }
-            if moved, let selected, let index = rows.firstIndex(where: { $0.id == selected }) {
+            if moved, let selected, selected != clickedRow, store.conversation == nil,
+               let index = rows.firstIndex(where: { $0.id == selected }) {
                 table.scrollRowToVisible(index)
             }
+            if moved { clickedRow = nil }
             if changed != [] { schedulePrefetch() }
         }
 
@@ -184,6 +198,7 @@ struct ThreadListMac: NSViewRepresentable {
             case .snooze: store.run(.snooze, on: threads)
             case .read: store.run(.read, on: threads)
             case .none:
+                clickedRow = row.id
                 store.clearSelection()
                 store.open(row.id)
             }

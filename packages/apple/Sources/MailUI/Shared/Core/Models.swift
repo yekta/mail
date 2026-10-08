@@ -80,6 +80,7 @@ struct MessageItem: Codable, Identifiable, Hashable {
     let unread: Bool
     let folded: Bool
     let html: String?
+    let failed: Bool
     let blockedImages: Bool
     let attachments: [Attachment]
 }

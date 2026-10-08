@@ -26,9 +26,12 @@ pub const API_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 const PAGE: usize = 500;
 const BACKFILL_PAGE: usize = 100;
 const CONCURRENT_GETS: usize = 8;
-/// Gmail lets each user spend 15,000 quota units a minute; requests are paced to stay under it.
-const UNITS_PER_SECOND: f64 = 200.0;
-const BURST_UNITS: f64 = 2500.0;
+/// Gmail lets each user spend 6,000 quota units a minute on our project; requests are paced so
+/// that no minute, burst included, spends more.
+const UNITS_PER_SECOND: f64 = 90.0;
+const BURST_UNITS: f64 = 500.0;
+/// What the worker's own requests (syncing, prefetching) leave for those someone waits for.
+const RESERVE_UNITS: f64 = 100.0;
 const HEADERS: [&str; 15] = [
     "From",
     "To",
@@ -55,13 +58,23 @@ pub struct Gmail {
     api: Arc<String>,
     oauth: Arc<OAuth>,
     token: Arc<Mutex<Option<(String, Instant)>>>,
-    pace: Arc<Mutex<Pace>>,
+    pace: Quota,
+    background: bool,
 }
 
+/// An account's quota, shared by all its connections.
+pub type Quota = Arc<Mutex<Pace>>;
+
 /// The quota units that can be spent now, and when that was counted.
-struct Pace {
+pub struct Pace {
     units: f64,
     at: Instant,
+}
+
+impl Default for Pace {
+    fn default() -> Self {
+        Self { units: BURST_UNITS, at: Instant::now() }
+    }
 }
 
 struct OAuth {
@@ -128,7 +141,7 @@ struct SyncState {
 }
 
 impl Gmail {
-    pub async fn open(state: &AppState, secret: &str) -> anyhow::Result<Self> {
+    pub async fn open(state: &AppState, account: &AccountRow, secret: &str) -> anyhow::Result<Self> {
         let credentials: Credentials = serde_json::from_str(secret)?;
         let config = &state.config;
         let gmail = Self {
@@ -141,10 +154,17 @@ impl Gmail {
                 refresh_token: credentials.refresh_token,
             }),
             token: Arc::new(Mutex::new(None)),
-            pace: Arc::new(Mutex::new(Pace { units: BURST_UNITS, at: Instant::now() })),
+            pace: state.workers.quota(account.id),
+            background: false,
         };
         gmail.access_token().await?;
         Ok(gmail)
+    }
+
+    /// The same connection for what the worker does unasked, which leaves RESERVE_UNITS of the
+    /// quota to what someone is waiting for.
+    pub fn background(&self) -> Self {
+        Self { background: true, ..self.clone() }
     }
 
     async fn access_token(&self) -> anyhow::Result<String> {
@@ -237,17 +257,24 @@ impl Gmail {
         anyhow::bail!("Gmail kept refusing {what}")
     }
 
-    /// Waits until `units` of the quota can be spent. Requests queue on the lock, in turn.
+    /// Waits until `units` of the quota can be spent, and spends them.
     async fn spend(&self, units: u32) {
-        let mut pace = self.pace.lock().await;
-        let now = Instant::now();
-        pace.units = (pace.units + now.duration_since(pace.at).as_secs_f64() * UNITS_PER_SECOND).min(BURST_UNITS);
-        pace.at = now;
-        pace.units -= f64::from(units);
-        if pace.units < 0.0 {
-            tokio::time::sleep(Duration::from_secs_f64(-pace.units / UNITS_PER_SECOND)).await;
-            pace.units = 0.0;
-            pace.at = Instant::now();
+        let units = f64::from(units);
+        let keep = if self.background { RESERVE_UNITS } else { 0.0 };
+        loop {
+            let short = {
+                let mut pace = self.pace.lock().await;
+                let now = Instant::now();
+                pace.units =
+                    (pace.units + now.duration_since(pace.at).as_secs_f64() * UNITS_PER_SECOND).min(BURST_UNITS);
+                pace.at = now;
+                if pace.units >= units + keep {
+                    pace.units -= units;
+                    return;
+                }
+                units + keep - pace.units
+            };
+            tokio::time::sleep(Duration::from_secs_f64(short / UNITS_PER_SECOND)).await;
         }
     }
 
@@ -386,7 +413,7 @@ impl Gmail {
         labels: &HashMap<String, Uuid>,
         ids: &[String],
     ) -> anyhow::Result<()> {
-        for chunk in ids.chunks(200) {
+        for chunk in ids.chunks(50) {
             let fetched: Vec<(String, anyhow::Result<GmailMessage>)> = stream::iter(chunk.iter().cloned())
                 .map(|id| async move {
                     let mut query = vec![("format", "metadata".to_string())];
