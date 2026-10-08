@@ -106,6 +106,57 @@ private struct SplitForm: View {
     }
 }
 
+/// The mailboxes shown as tabs over the list: which, and in what order.
+struct TabSettings: View {
+    @Environment(MailStore.self) private var store
+
+    var body: some View {
+        let tabs = store.tabs
+        VStack(alignment: .leading, spacing: 8) {
+            if tabs.isEmpty {
+                Text("No tabs. Mailboxes are opened from the sidebar.").font(.ui(13)).foregroundStyle(Tokens.mutedMoreForeground.color)
+            }
+            ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                HStack(spacing: 8) {
+                    Image(Symbol.named(tab.symbol), size: 14).foregroundStyle(Tokens.mutedMoreForeground.color).frame(width: 18)
+                    Text(store.tabName(tab)).font(.ui(14)).lineLimit(1)
+                    Spacer()
+                    IconButton(symbol: .chevronUp, help: "Move up") { move(tabs, from: index, by: -1) }
+                        .disabled(index == 0)
+                    IconButton(symbol: .chevronDown, help: "Move down") { move(tabs, from: index, by: 1) }
+                        .disabled(index == tabs.count - 1)
+                    IconButton(symbol: .x, help: "Remove") { store.toggleTab(tab.id) }
+                }
+            }
+            ActionMenu(title: "Add tab", symbol: .plus) {
+                ForEach(store.unified.filter { !store.isTab($0.id) }) { mailbox in
+                    item(mailbox)
+                }
+                ForEach(store.accounts) { account in
+                    let left = account.mailboxes.filter { !store.isTab($0.id) }
+                    if !left.isEmpty {
+                        Menu(account.address) {
+                            ForEach(left) { mailbox in item(mailbox) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func item(_ mailbox: Mailbox) -> some View {
+        Button { store.toggleTab(mailbox.id) } label: {
+            Label { Text(mailbox.name) } icon: { Image(Symbol.named(mailbox.symbol), size: 15) }
+        }
+    }
+
+    private func move(_ tabs: [Mailbox], from index: Int, by step: Int) {
+        var ids = tabs.map(\.id)
+        ids.swapAt(index, index + step)
+        store.setTabs(ids)
+    }
+}
+
 /// The senders and domains blocked, each with a way back.
 struct BlockedSettings: View {
     @Environment(MailStore.self) private var store

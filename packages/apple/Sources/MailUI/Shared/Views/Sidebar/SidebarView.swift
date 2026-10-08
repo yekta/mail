@@ -61,6 +61,9 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(store.isTab(mailbox.id) ? "Remove from Tabs" : "Add to Tabs") { store.toggleTab(mailbox.id) }
+        }
     }
 
     private func accountRow(_ account: AccountView) -> some View {

@@ -208,9 +208,11 @@ struct MacTopBar: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 240)
                 .frame(height: 32)
                 .overlay(Capsule().strokeBorder(Tokens.input.color, lineWidth: 1))
+                Spacer()
+                MailboxTabs()
                 Spacer()
             }
             ActionButton(title: "Compose", symbol: .squarePen, variant: .outline, action: store.newMessage)

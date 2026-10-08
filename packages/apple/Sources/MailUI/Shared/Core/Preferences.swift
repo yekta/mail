@@ -67,3 +67,18 @@ extension Address {
         return String(first)
     }
 }
+
+/// The mailboxes shown as tabs over the list, `tabs`: their ids in order. Unset, the usual four.
+enum TabPreference {
+    static let key = "tabs"
+    static let standard = ["inbox", "sent", "starred", "snoozed"]
+
+    static func ids(in preferences: [String: JSONValue]) -> [String] {
+        guard case .array(let values) = preferences[key] else { return standard }
+        return values.compactMap(\.string)
+    }
+
+    static func value(_ ids: [String]) -> JSONValue {
+        .array(ids.map { .string($0) })
+    }
+}
