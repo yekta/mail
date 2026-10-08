@@ -320,7 +320,7 @@ final class ThreadRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         let column = column
         if isCurrent || hovering {
-            Tokens.accent.platform.setFill()
+            (isCurrent ? Tokens.accentLargerStronger : Tokens.accentLarger).platform.setFill()
             column.fill()
         }
         if isChecked {
@@ -367,7 +367,7 @@ final class ThreadRowView: NSTableRowView {
             trailing = (actions.last?.2.minX ?? starRect.minX) - 16
             for (kind, symbol, rect) in actions {
                 let lit = hoveredHit == kind
-                if lit { Self.drawHover(around: rect, color: Tokens.accentStronger.platform) }
+                if lit { Self.drawHover(around: rect, color: Tokens.accent.platform) }
                 Self.drawSymbol(symbol, in: rect, color: lit ? Tokens.foreground.platform : Tokens.mutedForeground.platform)
             }
         } else {

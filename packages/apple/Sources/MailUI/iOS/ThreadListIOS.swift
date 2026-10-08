@@ -192,7 +192,7 @@ final class ThreadCell: UITableViewCell {
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         contentView.addSubview(canvas)
         let pressed = UIView()
-        pressed.backgroundColor = Tokens.accent.platform
+        pressed.backgroundColor = Tokens.accentLargerStronger.platform
         selectedBackgroundView = pressed
     }
 

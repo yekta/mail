@@ -63,7 +63,7 @@ struct PillTabs<Tab: Identifiable & Hashable, Menu: View>: View where Tab.ID == 
             }
             .padding(.horizontal, Space.m * Platform.scale)
             .frame(height: ControlSize.regular.height * Platform.scale)
-            .background(RoundedRectangle(cornerRadius: Theme.radius + 4).fill(chosen ? Tokens.accent.color : hovered ? Tokens.accentStronger.color : .clear))
+            .background(RoundedRectangle(cornerRadius: Theme.radius + 4).fill(chosen ? Tokens.accentStronger.color : hovered ? Tokens.accent.color : .clear))
             .padding(.horizontal, 1)
             .contentShape(Rectangle())
         }

@@ -146,7 +146,7 @@ struct ActionButton: View {
         private var background: Color {
             switch variant {
             case .primary: hovered ? Tokens.primary.color.opacity(0.88) : Tokens.primary.color
-            case .outline, .ghost, .destructive: hovered ? Tokens.accentStronger.color : .clear
+            case .outline, .ghost, .destructive: hovered ? Tokens.accent.color : .clear
             }
         }
 
@@ -240,7 +240,7 @@ struct IconCircle: View {
     var body: some View {
         ButtonIcon(symbol: symbol, pending: pending, size: size.icon, tint: tint)
             .frame(width: size.height * Platform.scale, height: size.height * Platform.scale)
-            .background(Circle().fill(hovered ? Tokens.accentStronger.color : .clear))
+            .background(Circle().fill(hovered ? Tokens.accent.color : .clear))
             .overlay(Circle().strokeBorder(circled ? Tokens.border.color : .clear, lineWidth: Theme.hairline))
             .padding(.horizontal, Theme.buttonGap / 2)
             .contentShape(Rectangle())
@@ -285,7 +285,7 @@ struct PlainButton<Label: View>: View {
         }
 
         private var fill: Color {
-            guard let tint else { return Tokens.accentStronger.color }
+            guard let tint else { return Tokens.accent.color }
             return tint.opacity(Tokens.colorTintOpacity).color
         }
     }
