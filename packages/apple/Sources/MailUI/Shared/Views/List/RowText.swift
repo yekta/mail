@@ -41,6 +41,6 @@ struct RowText {
             line.append(NSAttributedString(string: "  –  " + snippetText, attributes: Self.style(Self.snippetSize, .regular, Tokens.mutedMoreForeground)))
         }
         self.line = line
-        date = NSAttributedString(string: row.date, attributes: Self.style(Self.dateSize, row.unread ? .semibold : .regular, strong))
+        date = NSAttributedString(string: row.date, attributes: Self.style(Self.dateSize, weight, row.unread ? strong : Tokens.mutedMoreForeground))
     }
 }
