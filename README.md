@@ -70,6 +70,8 @@ apps/macos/scripts/build-app.sh --open
 
 The apps start on our server, `https://api.wonnet.app`. `MAIL_SERVER_URL=http://localhost:3000 apps/macos/scripts/build-app.sh` builds one that starts on your own, and the server can be changed under **Advanced** on the first screen.
 
+The Mac app from a [release](https://github.com/yekta/wonnet/releases/latest) keeps itself current: it downloads and installs each new release on its own and shows a banner to restart into it. A copy you built yourself doesn't, as it isn't signed by the developer.
+
 ```sh
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 cd apps/ios && xcodegen generate && open Mail.xcodeproj

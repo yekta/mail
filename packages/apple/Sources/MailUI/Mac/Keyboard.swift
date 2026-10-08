@@ -10,6 +10,9 @@ struct MacCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Message") { store.newMessage() }.keyboardShortcut("n").disabled(store.sheetOpen)
         }
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { store.updater.check(asked: true) }
+        }
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { store.settingsOpen = true }.keyboardShortcut(",").disabled(store.sheetOpen)
         }

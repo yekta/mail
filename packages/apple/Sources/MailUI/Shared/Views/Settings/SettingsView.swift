@@ -64,6 +64,15 @@ struct SettingsView: View {
                     Text(store.server).font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color).textSelection(.enabled)
                     Text(connectionText).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color)
                 }
+                #if os(macOS)
+                SettingsSection(title: "Updates", detail: "New versions are downloaded and installed on their own; a restart finishes them.") {
+                    UpdateSettings()
+                }
+                #else
+                SettingsSection(title: "Version") {
+                    Text("Wonnet \(Platform.version)").font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color)
+                }
+                #endif
                 ActionButton(title: "Sign out", symbol: .logOut, variant: .destructive) {
                     store.signOut()
                     dismiss()
@@ -97,6 +106,40 @@ struct SettingsView: View {
         }
     }
 }
+
+#if os(macOS)
+/// The version this is, the update as it goes, and the restart once one is in.
+private struct UpdateSettings: View {
+    @Environment(MailStore.self) private var store
+
+    var body: some View {
+        let updater = store.updater
+        HStack(spacing: 12) {
+            Text("Wonnet \(updater.current)").font(.ui(13)).foregroundStyle(Tokens.secondaryForeground.color)
+            Spacer()
+            switch updater.state {
+            case .ready: ActionButton(title: "Restart", variant: .primary) { updater.relaunch() }
+            case .failed: ActionButton(title: "Try again", symbol: .refreshCw) { updater.retry() }
+            default: ActionButton(title: "Check for updates", symbol: .refreshCw, pending: updater.state == .checking) { updater.check(asked: true) }
+            }
+        }
+        if let status {
+            Text(status).font(.ui(12)).foregroundStyle(Tokens.mutedForeground.color).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var status: String? {
+        switch store.updater.state {
+        case .idle, .checking: nil
+        case .upToDate: "Up to date."
+        case .downloading(let version, let fraction): "Downloading \(version)… \(Int(fraction * 100))%"
+        case .installing(let version): "Installing \(version)…"
+        case .ready(let version): "Wonnet \(version) is installed. Restart to use it."
+        case .failed(let message): message
+        }
+    }
+}
+#endif
 
 /// A part of the settings: a small heading, maybe a line about it, and its controls.
 struct SettingsSection<Content: View>: View {

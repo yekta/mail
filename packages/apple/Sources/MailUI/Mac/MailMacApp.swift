@@ -87,6 +87,9 @@ struct MacRoot: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 .allowsHitTesting(false)
+            if case .ready(let version) = store.updater.state {
+                Banner(symbol: .circleCheck, text: "Wonnet \(version) is installed. Restart to use it.", action: "Restart") { store.updater.relaunch() }
+            }
             MacTopBar(focusSearch: focusSearch, showSidebar: { showSidebar(true) })
             Rectangle().fill(Tokens.border.color).frame(height: 1)
             ZStack {

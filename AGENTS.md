@@ -128,8 +128,9 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 - `Shared/Views/Thread`: the thread, and `MessageWebView.swift`, the pooled web views that draw
   bodies and report their height.
 - `Shared/Views/Sidebar`, `Compose`, `Onboarding`, `Settings`: SwiftUI.
-- `Mac/`: `MailMacApp.swift` (the window, the top bar), `Keyboard.swift` (the single keys) and
-  `ThreadListMac.swift` (an `NSTableView`).
+- `Mac/`: `MailMacApp.swift` (the window, the top bar), `Keyboard.swift` (the single keys),
+  `ThreadListMac.swift` (an `NSTableView`) and `AppUpdater.swift` (downloads and installs the
+  latest GitHub release on its own; a banner offers the restart).
 - `iOS/`: `MailIOSApp.swift` (the navigation stack) and `ThreadListIOS.swift` (a `UITableView`
   with the swipes).
 
