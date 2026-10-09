@@ -162,20 +162,33 @@ pub async fn create_user(
     if found[1][1]["list"].as_array().into_iter().flatten().any(|existing| existing["emailAddress"] == email) {
         return Ok(());
     }
-    let domain_id =
-        match found[0][1]["list"].as_array().into_iter().flatten().find(|existing| existing["name"] == domain) {
-            Some(existing) => existing["id"].as_str().unwrap_or_default().to_string(),
-            None => {
-                let made = call(
-                    json!([["x:Domain/set", { "accountId": account, "create": { "d": { "name": domain } } }, "0"]]),
-                )
-                .await?;
-                made[0][1]["created"]["d"]["id"]
-                    .as_str()
-                    .map(String::from)
-                    .ok_or_else(|| anyhow::anyhow!("Stalwart didn't make {domain}: {}", made[0][1]))?
+    let domain_in = |answer: &Value| {
+        answer["list"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|existing| existing["name"] == domain)
+            .and_then(|existing| existing["id"].as_str().map(String::from))
+    };
+    let domain_id = match domain_in(&found[0][1]) {
+        Some(id) => id,
+        None => {
+            let made =
+                call(json!([["x:Domain/set", { "accountId": account, "create": { "d": { "name": domain } } }, "0"]]))
+                    .await?;
+            match made[0][1]["created"]["d"]["id"].as_str() {
+                Some(id) => id.to_string(),
+                // Another seed made it first: `cargo test` runs the Stalwart tests at once.
+                None => {
+                    let again =
+                        call(json!([["x:Domain/get", { "accountId": account, "properties": ["id", "name"] }, "0"]]))
+                            .await?;
+                    domain_in(&again[0][1])
+                        .ok_or_else(|| anyhow::anyhow!("Stalwart didn't make {domain}: {}", made[0][1]))?
+                }
             }
-        };
+        }
+    };
     let user = json!({ "@type": "User", "name": name, "domainId": domain_id,
         "credentials": { "0": { "@type": "Password", "secret": password } } });
     let made = call(json!([["x:Account/set", { "accountId": account, "create": { "u": user } }, "0"]])).await?;
