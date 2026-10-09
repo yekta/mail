@@ -49,7 +49,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     private let cardEdge = UIView()
     /// Behind the card, since the card clips: it casts the card's shadow over the sidebar.
     private let cardShadow = UIView()
-    /// Over the card while the sidebar shows: it dims the list and takes the tap that closes.
+    /// Over the card while the sidebar shows: it takes the tap that closes.
     private let shade = UIControl()
     private let pan = UIPanGestureRecognizer()
     private(set) var open = false
@@ -95,8 +95,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         card.addSubview(content.view)
         content.didMove(toParent: self)
 
-        shade.backgroundColor = Tokens.background.platform
-        shade.alpha = 0
+        shade.backgroundColor = .clear
         shade.isHidden = true
         shade.addAction(UIAction { [weak self] _ in self?.setOpen(false, animated: true) }, for: .touchUpInside)
         card.addSubview(shade)
@@ -131,7 +130,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         cardShadow.frame = card.frame
         cardShadow.alpha = min(1, progress * 4)
         shade.frame = card.bounds
-        shade.alpha = 0.55 * progress
         shade.isHidden = progress == 0
         sidebar.view.isHidden = progress <= 0
     }
@@ -162,7 +160,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         slideLink = link
     }
 
-    /// A critically damped spring, followed frame by frame so the shade and the shadow follow it.
+    /// A critically damped spring, followed frame by frame so the edge and the shadow follow it.
     private struct Slide {
         static let stiffness: CGFloat = 22
         let target: CGFloat
