@@ -11,9 +11,19 @@ typealias PlatformScrollView = UIScrollView
 /// Brings a scroll view back to where it was left, and reports where it goes after. The content
 /// may not be tall enough at first (rows not yet laid out, message bodies still measuring), so
 /// the offset is applied again each time the content grows, until it fits or the user scrolls.
+/// Content that shrinks under the kept place for a moment (a body measured again before its
+/// images are in) clamps the view to its end; that is not a scroll, and the place is taken up
+/// again once the content is tall enough.
 @MainActor
 final class ScrollKeeper: NSObject {
     private(set) var pending: CGFloat?
+    /// Where the view was left, as last reported, and how tall the content was then.
+    private var kept: CGFloat
+    private var height: CGFloat = 0
+    /// Whether the kept place is past the end of content that shrank under it, and where the
+    /// view was clamped to meanwhile.
+    private var lost = false
+    private var at: CGFloat = 0
     private let report: (CGFloat) -> Void
     private weak var scroll: PlatformScrollView?
     private var restoring = false
@@ -23,6 +33,7 @@ final class ScrollKeeper: NSObject {
 
     init(restore: CGFloat, report: @escaping (CGFloat) -> Void) {
         pending = restore > 0 ? restore : nil
+        kept = restore
         self.report = report
     }
 
@@ -55,18 +66,33 @@ final class ScrollKeeper: NSObject {
     /// Goes to the top, for a list that now shows another mailbox.
     func top() {
         pending = nil
+        lost = false
         guard let scroll else { return }
         Self.scroll(scroll, to: Self.range(of: scroll).0)
     }
 
     @objc private func moved() {
-        guard !restoring else { return }
+        guard !restoring, let scroll else { return }
         guard pending == nil else {
             restore()
             return
         }
-        guard let scroll else { return }
-        report(Self.offset(of: scroll))
+        let (top, bottom) = Self.range(of: scroll)
+        // A bounce past an end is that end.
+        let offset = min(max(Self.offset(of: scroll), top), bottom)
+        let atEnd = abs(offset - bottom) <= 1
+        // Clamped to the end of content that shrank short of the kept place: not a scroll. While
+        // the place is lost, the content growing back may set the same offset again.
+        let clamped = lost ? atEnd || offset == at : atEnd && kept - offset > 1 && Self.height(of: scroll) < height
+        guard !clamped else {
+            lost = true
+            restore()
+            at = Self.offset(of: scroll)
+            return
+        }
+        lost = false
+        keep(offset)
+        report(offset)
     }
 
     @objc private func grew() {
@@ -75,23 +101,42 @@ final class ScrollKeeper: NSObject {
 
     #if os(macOS)
     @objc private func dragged() {
-        pending = nil
+        scrolled()
     }
     #else
     @objc private func panned(_ gesture: UIPanGestureRecognizer) {
-        if gesture.state == .began { pending = nil }
+        if gesture.state == .began { scrolled() }
     }
     #endif
 
-    /// Scrolls as far towards the kept offset as the content allows; done once it is reached.
+    /// The user scrolls: wherever the view goes now is where it is left.
+    private func scrolled() {
+        pending = nil
+        lost = false
+    }
+
+    private func keep(_ offset: CGFloat) {
+        kept = offset
+        height = scroll.map(Self.height(of:)) ?? 0
+    }
+
+    /// The offset to get back to: the one restored, else the kept one the content shrank under.
+    private var target: CGFloat? {
+        pending ?? (lost ? kept : nil)
+    }
+
+    /// Scrolls as far towards the target as the content allows; done once it is reached.
     private func restore() {
-        guard let pending, let scroll, scroll.bounds.height > 0 else { return }
+        guard let target, let scroll, scroll.bounds.height > 0 else { return }
         let (top, bottom) = Self.range(of: scroll)
         guard bottom > top else { return }
         restoring = true
-        Self.scroll(scroll, to: min(pending, bottom))
+        Self.scroll(scroll, to: min(target, bottom))
         restoring = false
-        if bottom >= pending { self.pending = nil }
+        guard bottom >= target else { return }
+        keep(target)
+        pending = nil
+        lost = false
     }
 
     #if os(macOS)
@@ -99,10 +144,13 @@ final class ScrollKeeper: NSObject {
         scroll.contentView.bounds.origin.y
     }
 
+    private static func height(of scroll: NSScrollView) -> CGFloat {
+        scroll.documentView?.frame.height ?? 0
+    }
+
     private static func range(of scroll: NSScrollView) -> (CGFloat, CGFloat) {
-        let height = scroll.documentView?.frame.height ?? 0
         let top = -scroll.contentInsets.top
-        return (top, max(height - scroll.contentView.bounds.height + scroll.contentInsets.bottom, top))
+        return (top, max(height(of: scroll) - scroll.contentView.bounds.height + scroll.contentInsets.bottom, top))
     }
 
     private static func scroll(_ scroll: NSScrollView, to y: CGFloat) {
@@ -114,9 +162,13 @@ final class ScrollKeeper: NSObject {
         scroll.contentOffset.y
     }
 
+    private static func height(of scroll: UIScrollView) -> CGFloat {
+        scroll.contentSize.height
+    }
+
     private static func range(of scroll: UIScrollView) -> (CGFloat, CGFloat) {
         let top = -scroll.adjustedContentInset.top
-        return (top, max(scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom, top))
+        return (top, max(height(of: scroll) - scroll.bounds.height + scroll.adjustedContentInset.bottom, top))
     }
 
     private static func scroll(_ scroll: UIScrollView, to y: CGFloat) {
