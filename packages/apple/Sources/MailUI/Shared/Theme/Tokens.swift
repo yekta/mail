@@ -5,9 +5,9 @@ import SwiftUI
 enum Tokens {
     static let radius: CGFloat = 6
 
-    static let background = ThemeColor(light: 0xf8f9fa, dark: 0x161819)
+    static let background = ThemeColor(light: 0xfbfcfd, dark: 0x161819)
     static let foreground = ThemeColor(light: 0x434b52, dark: 0xf1f1f1)
-    static let card = ThemeColor(light: 0xffffff, dark: 0x1a1c1e)
+    static let card = ThemeColor(light: 0xfbfcfd, dark: 0x1a1c1e)
     static let cardForeground = ThemeColor(light: 0x434b52, dark: 0xf1f1f1)
     static let popover = ThemeColor(light: 0xffffff, dark: 0x232429)
     static let popoverForeground = ThemeColor(light: 0x434b52, dark: 0xf1f1f1)
@@ -35,7 +35,7 @@ enum Tokens {
     static let ring = ThemeColor(light: 0x4f96f2, dark: 0x5ea2f5)
     static let overlay = ThemeColor(light: 0x000000, dark: 0x000000)
     static let shadow = ThemeColor(light: 0x000000, dark: 0x000000)
-    static let shadowOpacity = ThemeNumber(light: 0.14, dark: 0.4)
+    static let shadowOpacity = ThemeNumber(light: 0.1, dark: 0.25)
     static let shadowStrongerOpacity = ThemeNumber(light: 0.22, dark: 0.6)
     static let colorTintOpacity = ThemeNumber(light: 0.12, dark: 0.08)
     static let colorTintStrongerOpacity = ThemeNumber(light: 0.2, dark: 0.14)

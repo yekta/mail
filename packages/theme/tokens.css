@@ -5,9 +5,9 @@
 }
 
 :root {
-  --background: #f8f9fa;
+  --background: #fbfcfd;
   --foreground: #434b52;
-  --card: #ffffff;
+  --card: #fbfcfd;
   --card-foreground: #434b52;
   --popover: #ffffff;
   --popover-foreground: #434b52;
@@ -35,7 +35,7 @@
   --ring: #4f96f2;
   --overlay: #000000;
   --shadow: #000000;
-  --shadow-opacity: 0.14;
+  --shadow-opacity: 0.1;
   --shadow-stronger-opacity: 0.22;
   --color-tint-opacity: 0.12;
   --color-tint-stronger-opacity: 0.2;
@@ -83,7 +83,7 @@
     --ring: #5ea2f5;
     --overlay: #000000;
     --shadow: #000000;
-    --shadow-opacity: 0.4;
+    --shadow-opacity: 0.25;
     --shadow-stronger-opacity: 0.6;
     --color-tint-opacity: 0.08;
     --color-tint-stronger-opacity: 0.14;
