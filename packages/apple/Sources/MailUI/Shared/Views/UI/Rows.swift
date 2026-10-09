@@ -37,7 +37,8 @@ extension ItemRow where Trailing == EmptyView {
 
 /// A row that goes somewhere: a mailbox in the sidebar, Settings. `selected` is where the app
 /// is. `count` is its unread, shown when above zero. Half of `Theme.buttonGap` above and below
-/// keeps its face off the next row's while the hit areas touch.
+/// keeps its face off the next row's while the hit areas touch. Without an `action` it is the
+/// face alone, for a list that takes the clicks itself and says when it is hovered.
 struct NavRow<Trailing: View>: View {
     let title: String
     var symbol: Symbol?
@@ -46,17 +47,22 @@ struct NavRow<Trailing: View>: View {
     var selected = false
     var indent: CGFloat = 0
     var verticalPadding: CGFloat = 0
-    let action: () -> Void
+    let action: (() -> Void)?
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        Button(action: action) {
-            Face(
-                title: title, symbol: symbol, dot: dot, count: count, selected: selected, indent: indent,
-                verticalPadding: verticalPadding, trailing: trailing
-            )
+        if let action {
+            Button(action: action) { face }.buttonStyle(.press)
+        } else {
+            face
         }
-        .buttonStyle(.press)
+    }
+
+    private var face: some View {
+        Face(
+            title: title, symbol: symbol, dot: dot, count: count, selected: selected, indent: indent,
+            verticalPadding: verticalPadding, trailing: trailing
+        )
     }
 
     private struct Face: View {
@@ -100,7 +106,7 @@ struct NavRow<Trailing: View>: View {
 }
 
 extension NavRow where Trailing == EmptyView {
-    init(title: String, symbol: Symbol? = nil, dot: Color? = nil, count: Int = 0, selected: Bool = false, indent: CGFloat = 0, action: @escaping () -> Void) {
+    init(title: String, symbol: Symbol? = nil, dot: Color? = nil, count: Int = 0, selected: Bool = false, indent: CGFloat = 0, action: (() -> Void)? = nil) {
         self.init(title: title, symbol: symbol, dot: dot, count: count, selected: selected, indent: indent, action: action, trailing: { EmptyView() })
     }
 }

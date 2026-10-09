@@ -137,14 +137,12 @@ struct GalleryView: View {
                         PillTabs(
                             tabs: [Tab(id: "important", name: "Inbox", count: 12), Tab(id: "other", name: "Starred", count: 0)],
                             selected: tab, symbol: { $0.id == "important" ? .inbox : .star }, title: \.name, count: \.count,
-                            pick: { tab = $0.id }, reorder: { _ in }
-                        ) { _ in
-                            Button("Remove from Tabs") {}
-                        }
+                            pick: { tab = $0.id }, reorder: { _ in }, menu: { _ in [RowMenuItem(title: "Remove from Tabs") {}] }
+                        )
                         BottomTabs(
                             tabs: [Tab(id: "important", name: "Inbox", count: 12), Tab(id: "other", name: "Starred", count: 0)],
                             selected: tab, symbol: { $0.id == "important" ? .inbox : .star }, title: \.name, count: \.count,
-                            pick: { tab = $0.id }
+                            pick: { tab = $0.id }, reorder: { _ in }
                         )
                     }
                     FormSection(title: "Notes") {

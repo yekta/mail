@@ -228,7 +228,8 @@ extension View {
     }
 }
 
-/// The mailboxes kept as tabs, along the bottom.
+/// The mailboxes kept as tabs, along the bottom. One held and dragged moves; the order is the
+/// `tabs` preference, so every device shows the same.
 struct MailboxTabBar: View {
     @Environment(MailStore.self) private var store
 
@@ -237,7 +238,7 @@ struct MailboxTabBar: View {
             BottomTabs(
                 tabs: store.tabs, selected: store.baseMailbox,
                 symbol: { Symbol.named($0.symbol) }, title: { store.tabName($0, shownIn: store.listAccount) }, count: \.unread,
-                pick: { store.select(mailbox: $0.id) }
+                pick: { store.select(mailbox: $0.id) }, reorder: { store.setTabs($0.map(store.savedTab)) }
             )
         }
     }

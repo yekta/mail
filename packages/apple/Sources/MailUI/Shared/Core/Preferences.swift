@@ -84,3 +84,32 @@ enum TabPreference {
         .array(ids.map { .string($0) })
     }
 }
+
+/// The sidebar's order: `sidebar`, the ids of the mailboxes of every account together, and
+/// `accounts`, the accounts' ids. One not named comes after the named, as the core lists them.
+enum SidebarOrder {
+    static let mailboxesKey = "sidebar"
+    static let accountsKey = "accounts"
+
+    static func ids(_ key: String, in preferences: [String: JSONValue]) -> [String] {
+        guard case .array(let values) = preferences[key] else { return [] }
+        return values.compactMap(\.string)
+    }
+
+    static func value(_ ids: [String]) -> JSONValue {
+        .array(ids.map { .string($0) })
+    }
+
+    /// The items in the order of `ids`, then the rest as they came.
+    static func sorted<Item: Identifiable>(_ items: [Item], by ids: [String]) -> [Item] where Item.ID == String {
+        let ranks = Dictionary(ids.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return items.enumerated()
+            .sorted { (ranks[$0.element.id] ?? ids.count, $0.offset) < (ranks[$1.element.id] ?? ids.count, $1.offset) }
+            .map(\.element)
+    }
+
+    /// `id` put after the ids `before` it, with the rest of `all` after.
+    static func placed(_ id: String, after before: [String], among all: [String]) -> [String] {
+        before + [id] + all.filter { $0 != id && !before.contains($0) }
+    }
+}

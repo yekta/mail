@@ -10,9 +10,8 @@ struct MailboxTabs: View {
         PillTabs(
             tabs: store.tabs, selected: store.searchRows == nil ? store.baseMailbox : nil,
             symbol: { Symbol.named($0.symbol) }, title: { store.tabName($0, shownIn: store.listAccount) }, count: \.unread,
-            pick: { store.select(mailbox: $0.id) }, reorder: { store.setTabs($0.map(store.savedTab)) }
-        ) { tab in
-            Button("Remove from Tabs") { store.toggleTab(store.savedTab(tab.id)) }
-        }
+            pick: { store.select(mailbox: $0.id) }, reorder: { store.setTabs($0.map(store.savedTab)) },
+            menu: { tab in [RowMenuItem(title: "Remove from Tabs") { store.toggleTab(store.savedTab(tab.id)) }] }
+        )
     }
 }

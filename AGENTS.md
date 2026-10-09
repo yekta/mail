@@ -122,7 +122,9 @@ too) and the Apple kit's `Tokens.swift`. Never edit either by hand: change `toke
 - `Shared/Theme`: `Tokens.swift` (generated), `Theme.swift` (`Space` and the sizes) and
   `Typography.swift` (`TextStyle`, the text scale).
 - `Shared/Views/UI`: the design system's components, listed in `packages/apple/DESIGN.md` with
-  its rules; `Gallery.swift` shows them all (⌘K, "Component gallery").
+  its rules; `Gallery.swift` shows them all (⌘K, "Component gallery"). `MovableList.swift` is
+  what the two lists that drag rows into order share; `Mac/MovableListMac.swift` and
+  `iOS/MovableListIOS.swift` are the lists, with the sidebar and the tab strips made of them.
   `Shared/Views/List/RowText.swift`: a thread row's text, for both lists.
 - `Shared/Views/Thread/ThreadActions.swift`: every action on threads, one list for the keys, the
   toolbars, the menus and the palette. `Palette` (⌘K and the shortcuts sheet), `Pickers` (snooze
