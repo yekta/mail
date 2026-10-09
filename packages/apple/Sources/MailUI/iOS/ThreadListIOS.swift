@@ -235,7 +235,7 @@ private final class RowCanvas: UIView {
         }
         Theme.accountColor(row.color).platform.setFill()
         let top = first ? 0 : Theme.hairline
-        UIRectFill(CGRect(x: 0, y: top, width: Theme.accountBarWidth, height: bounds.height - top))
+        UIRectFill(CGRect(x: 0, y: top, width: Theme.iosAccountBarWidth, height: bounds.height - top))
         let left: CGFloat = 16
         let right = bounds.width - 16
         let star = CGRect(x: right - 18, y: 14, width: 18, height: 18)
