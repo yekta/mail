@@ -12,8 +12,12 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
     let checked: Set<String>
     /// False while the rows are the mailbox before; when they are the new one's, the list goes to the top.
     let ready: Bool
+    /// Whether the list comes back to where it was left; the search's results don't.
+    var keepsScroll = true
     /// Scrolls with the rows, at their head; 0 hides it.
     let headerHeight: CGFloat
+    /// Room under the last row, for what floats over the list.
+    var bottomInset: CGFloat = 0
     let open: (String) -> Void
     @ViewBuilder let header: () -> Header
 
@@ -28,6 +32,8 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
         let bottom = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: Theme.hairline))
         bottom.backgroundColor = Tokens.border.platform
         table.tableFooterView = bottom
+        table.contentInset.bottom = bottomInset
+        table.verticalScrollIndicatorInsets.bottom = bottomInset
         table.allowsMultipleSelectionDuringEditing = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
@@ -36,8 +42,10 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
         head.view.backgroundColor = .clear
         head.safeAreaRegions = []
         context.coordinator.head = head
-        context.coordinator.keeper = ScrollKeeper(restore: store.listOffset, report: store.noteScroll)
-        context.coordinator.keeper?.attach(table)
+        if keepsScroll {
+            context.coordinator.keeper = ScrollKeeper(restore: store.listOffset, report: store.noteScroll)
+            context.coordinator.keeper?.attach(table)
+        }
         return table
     }
 
