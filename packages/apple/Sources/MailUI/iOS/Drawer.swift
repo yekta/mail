@@ -83,7 +83,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         cardShadow.isUserInteractionEnabled = false
         cardShadow.layer.shadowColor = UIColor.black.cgColor
         cardShadow.layer.shadowOffset = .zero
-        cardShadow.layer.shadowRadius = 20
+        cardShadow.layer.shadowRadius = 12
         paintCardShadow()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: Self, _: UITraitCollection) in
             controller.paintCardShadow()

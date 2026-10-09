@@ -121,7 +121,7 @@ struct ThreadScreen: View {
         .padding(.horizontal, pagePadding)
         .padding(.vertical, Space.xxl)
         .frame(maxWidth: Theme.cardWidth)
-        .background(Tokens.card.color)
+        .background(Rectangle().fill(Tokens.card.color).shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 16, y: 4))
     }
 
     private var pagePadding: CGFloat {

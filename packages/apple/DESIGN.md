@@ -55,7 +55,7 @@ added to the component, not to the view.
 | --- | --- |
 | `ActionButton`, `ActionMenu` | Words, an optional icon, four variants (`primary`, `outline`, `ghost`, `destructive`), three sizes, `pending`, `wide`; the menu opens one |
 | `IconButton`, `IconMenu`, `IconCircle` | An icon in a thin circle; `active`, `quiet`, `circled`, `pending` |
-| `FloatingButton` | An icon on a circle of clear glass over a page's corner: Compose over the list on iOS |
+| `FloatingButton` | An icon on a bordered circle of the page's colour, with a little shadow, over a page's corner: Compose over the list on iOS |
 | `PlainButton` | Only its content, still with hover, press and disabled states, and the minimum height; `tint` colours its hover |
 | `StarButton` | A thread's star, in the star colour when starred or hovered |
 | `InputField` | A text field with its label above, or a text box of `lines` |

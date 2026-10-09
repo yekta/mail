@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// An icon on a circle of clear glass, floating over a page's corner: Compose over the list on
-/// iOS. The page shows through it as it scrolls under. Before glass, a card with a shadow.
+/// An icon on a circle over a page's corner: Compose over the list on iOS. The page's colour
+/// with its border and a little shadow, so it stands off the list scrolling under it.
 struct FloatingButton: View {
     static let side: CGFloat = 56
 
@@ -20,17 +20,15 @@ struct FloatingButton: View {
         @Environment(\.hovered) private var hovered
 
         var body: some View {
-            let icon = Image(symbol, size: 22)
+            Image(symbol, size: 22)
                 .foregroundStyle(Tokens.foreground.color)
                 .frame(width: FloatingButton.side, height: FloatingButton.side)
-            if #available(iOS 26, macOS 26, *) {
-                icon.glassEffect(.clear.interactive(), in: .circle)
-            } else {
-                icon
-                    .background(Circle().fill(hovered ? Tokens.accent.color : Tokens.card.color))
-                    .overlay(Circle().strokeBorder(Tokens.border.color, lineWidth: Theme.hairline))
-                    .shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 12, y: 4)
-            }
+                .background(
+                    Circle()
+                        .fill(hovered ? Tokens.accent.color : Tokens.background.color)
+                        .shadow(color: Tokens.shadow.opacity(Tokens.shadowOpacity).color, radius: 8, y: 2)
+                )
+                .overlay(Circle().strokeBorder(Tokens.border.color, lineWidth: Theme.hairline))
         }
     }
 }
