@@ -188,8 +188,10 @@ struct ComposeView: View {
 
     // MARK: Parts
 
-    /// Send later, send and archive, and Send: at the end of the bar.
+    /// Send later, send and archive, and Send: at the end of the bar. On iOS they are the
+    /// navigation bar's own buttons, Send the prominent one.
     private var actions: some View {
+        #if os(macOS)
         HStack(spacing: 0) {
             IconButton(symbol: .calendarClock, help: "Send later (⌘⇧L)") { timing = .sendLater }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
@@ -199,8 +201,28 @@ struct ComposeView: View {
             }
             ActionButton(title: "Send", symbol: .send, variant: .primary) { send() }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(assembled.draft.to.isEmpty && assembled.draft.cc.isEmpty && assembled.draft.bcc.isEmpty)
+                .disabled(cannotSend)
         }
+        #else
+        Group {
+            Button { timing = .sendLater } label: { Image(.calendarClock) }
+                .accessibilityLabel("Send later")
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+            if compose.thread != nil {
+                Button { send(archive: true) } label: { Image(.archive) }
+                    .accessibilityLabel("Send and archive")
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+            }
+            Button("Send") { send() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(cannotSend)
+        }
+        #endif
+    }
+
+    private var cannotSend: Bool {
+        assembled.draft.to.isEmpty && assembled.draft.cc.isEmpty && assembled.draft.bcc.isEmpty
     }
 
     @ViewBuilder private var fields: some View {

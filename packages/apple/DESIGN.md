@@ -43,8 +43,10 @@ added to the component, not to the view.
   alerts, menus, iOS's navigation bar for sheets' titles and buttons, Quick Look, the file
   pickers. Segmented controls, dropdowns, fields and buttons are ours.
 - Sheets go through `Sheet`: on iOS it gets the system's title and Close in the navigation
-  bar, on the Mac our `HeaderBar` and Esc. `SheetSize` picks the window on the Mac and the
-  detents on iOS.
+  bar, on the Mac our `HeaderBar` and Esc. What trails in the bar is ours on the Mac and the
+  system's plain `Button`s on iOS, the main one `.borderedProminent`: the system draws the bar's
+  buttons, and ours inside it would be a pill in a pill. `SheetSize` picks the window on the
+  Mac and the detents on iOS.
 
 ## Components
 
