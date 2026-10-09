@@ -16,6 +16,8 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
     var keepsScroll = true
     /// Scrolls with the rows, at their head; 0 hides it.
     let headerHeight: CGFloat
+    /// Room under the last row, for what floats over the list.
+    var bottomInset: CGFloat = 0
     let open: (String) -> Void
     @ViewBuilder let header: () -> Header
 
@@ -30,6 +32,8 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
         let bottom = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: Theme.hairline))
         bottom.backgroundColor = Tokens.border.platform
         table.tableFooterView = bottom
+        table.contentInset.bottom = bottomInset
+        table.verticalScrollIndicatorInsets.bottom = bottomInset
         table.allowsMultipleSelectionDuringEditing = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator

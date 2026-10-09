@@ -126,6 +126,7 @@ struct MailboxScreen: View {
         ThreadListIOS(
             store: store, rows: store.rows, editing: editing, checked: store.selection, ready: store.listReady,
             headerHeight: ListHeader.shows(store) ? ListHeader.height : 0,
+            bottomInset: FloatingButton.side + Space.l * 2,
             open: { thread in openThread(thread, path: $path, store: store) },
             header: { ListHeader().environment(store) }
         )
