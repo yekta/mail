@@ -66,8 +66,9 @@ public final class MailStore {
     var signedIn = false
     var connection = "offline"
     var server = ""
-    var unified: [Mailbox] = []
-    var accounts: [AccountView] = []
+    /// The mailboxes of every account together and the accounts, as the core lists them.
+    private var listedUnified: [Mailbox] = []
+    private var listedAccounts: [AccountView] = []
     var mailbox = "inbox"
     var rows: [ThreadRow] = []
     /// False while the rows are still another mailbox's or filter's, until its page is read.
@@ -163,6 +164,20 @@ public final class MailStore {
         let parts = mailbox.split(separator: "/", omittingEmptySubsequences: false)
         guard let last = parts.last, last.hasPrefix("inbox:") else { return mailbox }
         return (parts.dropLast() + ["inbox"]).joined(separator: "/")
+    }
+
+    /// The mailboxes of every account together, in the sidebar's order.
+    var unified: [Mailbox] { SidebarOrder.sorted(listedUnified, by: SidebarOrder.ids(SidebarOrder.mailboxesKey, in: preferences)) }
+
+    /// The accounts, in the sidebar's order.
+    var accounts: [AccountView] { SidebarOrder.sorted(listedAccounts, by: SidebarOrder.ids(SidebarOrder.accountsKey, in: preferences)) }
+
+    func setSidebarOrder(mailboxes ids: [String]) {
+        setPreference(SidebarOrder.mailboxesKey, SidebarOrder.value(ids))
+    }
+
+    func setSidebarOrder(accounts ids: [String]) {
+        setPreference(SidebarOrder.accountsKey, SidebarOrder.value(ids))
     }
 
     /// Every mailbox there is, unified first.
@@ -284,8 +299,8 @@ public final class MailStore {
         signedIn = boot.status.signedIn
         connection = boot.status.connection
         server = boot.status.server ?? ""
-        unified = boot.mailboxes.unified
-        accounts = boot.mailboxes.accounts
+        listedUnified = boot.mailboxes.unified
+        listedAccounts = boot.mailboxes.accounts
         preferences = Dictionary(boot.preferences.values.map { ($0.key, $0.value) }, uniquingKeysWith: { _, last in last })
         preferencesLoaded = true
         mailbox = ui.mailbox
@@ -449,8 +464,8 @@ public final class MailStore {
             if state == "signed_out" {
                 conversation = nil
                 rows = []
-                unified = []
-                accounts = []
+                listedUnified = []
+                listedAccounts = []
                 selection = []
                 Notifier.shared.setBadge(0)
             }
@@ -474,8 +489,8 @@ public final class MailStore {
 
     func reloadMailboxes() async {
         guard let found = try? await bridge.call("mailboxes", as: Mailboxes.self) else { return }
-        if found.unified != unified { unified = found.unified }
-        if found.accounts != accounts { accounts = found.accounts }
+        if found.unified != listedUnified { listedUnified = found.unified }
+        if found.accounts != listedAccounts { listedAccounts = found.accounts }
         Notifier.shared.setBadge(unified.first(where: { $0.id == "inbox" })?.unread ?? 0)
         if !accounts.isEmpty { Notifier.shared.askPermission() }
     }

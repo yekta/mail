@@ -43,6 +43,11 @@ added to the component, not to the view.
 - The platform's controls are used when they fit, not by default: the switch (`ToggleRow`),
   alerts, menus, iOS's navigation bar for sheets' titles and buttons, Quick Look, the file
   pickers. Segmented controls, dropdowns, fields and buttons are ours.
+- A list whose rows the user puts in order is a `MovableList`. It picks a row up itself when it
+  is pressed and pulled (held, on iOS): a picture of it shrinks a little on its light and
+  follows the pointer, the rows it passes slide out of its way, and let go it slides into its
+  place. Its rows are faces, not buttons: the list takes the clicks and tells each row when it
+  is hovered. Nothing else drags: no handle, no edit mode.
 - Sheets go through `Sheet`: on iOS it gets the system's title and Close in the navigation
   bar, on the Mac our `HeaderBar` and Esc. What trails in the bar is ours on the Mac and the
   system's plain `Button`s on iOS, the main one `.borderedProminent`: the system draws the bar's
@@ -66,12 +71,13 @@ added to the component, not to the view.
 | `Disclosure` | A line that opens more |
 | `Chip` | A small pill: an address, a file, a label; `remove`, `action`, `pending`, `invalid` |
 | `ItemRow` | A thing in a list with its controls at the end |
-| `NavRow` | A row that goes somewhere, with a count and a selected state |
+| `NavRow` | A row that goes somewhere, with a count and a selected state; without an action, its face for a `MovableList` |
 | `ChoiceRow`, `ChoiceList` | One choice under a field, and the list that scrolls to the highlighted one |
 | `PopupCard` | A card over the page for suggestions |
 | `TabStrip` | Tabs on a line with counts |
 | `PillTabs` | Tabs on a line with an icon and a count, the chosen one filled in a rounded rectangle; dragged to reorder, with a menu on each |
-| `BottomTabs` | Tabs across the bottom of the screen, full width, each an icon over its name and count (iOS) |
+| `BottomTabs` | Tabs across the bottom of the screen, full width, each an icon over its name and count; held and dragged to reorder (iOS) |
+| `MovableList` | Rows along an axis that the list picks up and moves itself, in groups, with the rows under one going along; the sidebar and the tab strips are made of it |
 | `SectionHeading`, `FormSection` | A section's name in capitals, with its controls |
 | `Card`, `FormButtons` | A rounded card, and Save and Cancel under a form |
 | `Notice` | A line about something, muted or in error tone, with an optional action |

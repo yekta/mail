@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Tabs across the bottom of the screen, each an icon over its name and count, the chosen one in
 /// the text's colour. They share the width equally, so however many there are they fit; a long
-/// name is cut short. The page's colour reaches under the home indicator.
+/// name is cut short. With `reorder`, a tab held and dragged goes to another place, and the new
+/// order is given when it is let go. The page's colour reaches under the home indicator.
 struct BottomTabs<Tab: Identifiable & Hashable>: View {
     let tabs: [Tab]
     let selected: Tab.ID?
@@ -10,21 +11,24 @@ struct BottomTabs<Tab: Identifiable & Hashable>: View {
     let title: (Tab) -> String
     let count: (Tab) -> Int
     let pick: (Tab) -> Void
+    var reorder: (([Tab.ID]) -> Void)?
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs) { tab in
-                Button {
-                    pick(tab)
-                } label: {
-                    Face(symbol: symbol(tab), title: title(tab), count: count(tab), chosen: tab.id == selected)
-                }
-                .buttonStyle(.press)
-            }
+        MovableList(
+            items: tabs, axis: .horizontal, inset: Space.xs, fills: true, group: { _ in reorder == nil ? nil : "tabs" },
+            rowInset: EdgeInsets(top: Space.xs, leading: 0, bottom: Space.xs, trailing: 0), rowRadius: Theme.radius + 4,
+            clicked: pick, moved: moved
+        ) { tab in
+            Face(symbol: symbol(tab), title: title(tab), count: count(tab), chosen: tab.id == selected)
         }
-        .padding(.horizontal, Space.xs)
         .background(Tokens.background.color.ignoresSafeArea(edges: .bottom))
         .rule(.top)
+    }
+
+    private func moved(_ tab: Tab, to index: Int) {
+        var ids = tabs.map(\.id).filter { $0 != tab.id }
+        ids.insert(tab.id, at: min(index, ids.count))
+        reorder?(ids)
     }
 
     private struct Face: View {
