@@ -320,7 +320,7 @@ final class ThreadRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         let column = column
         if isCurrent || hovering {
-            (isCurrent ? Tokens.accentLargerStronger : Tokens.accentLarger).platform.setFill()
+            Tokens.accentLarger.platform.setFill()
             column.fill()
         }
         if isChecked {
