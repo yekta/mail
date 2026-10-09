@@ -54,6 +54,7 @@ added to the component, not to the view.
 | --- | --- |
 | `ActionButton`, `ActionMenu` | Words, an optional icon, four variants (`primary`, `outline`, `ghost`, `destructive`), three sizes, `pending`, `wide`; the menu opens one |
 | `IconButton`, `IconMenu`, `IconCircle` | An icon in a thin circle; `active`, `quiet`, `circled`, `pending` |
+| `FloatingButton` | An icon on a circle of clear glass over a page's corner: Compose over the list on iOS |
 | `PlainButton` | Only its content, still with hover, press and disabled states, and the minimum height; `tint` colours its hover |
 | `StarButton` | A thread's star, in the star colour when starred or hovered |
 | `InputField` | A text field with its label above, or a text box of `lines` |
@@ -78,7 +79,7 @@ added to the component, not to the view.
 | `Avatar` | Initials in a circle of the address's colour |
 | `SwatchRow` | The account colours on a line, to pick one |
 | `Rule`, `.rule(edge)` | A hairline, in `border` or in `cardBorder` |
-| `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page on the Mac; with a `center`, the sides split what it leaves |
+| `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page: the Mac's, and iOS's over the list; with a `center`, the sides split what it leaves |
 | `FlowLayout` | Wrapping layout for chips |
 
 The gallery shows all of them in every state: open the palette (⌘K) and pick "Component

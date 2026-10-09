@@ -42,7 +42,7 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, Space.m)
-        .frame(height: style == .sheet ? Theme.searchHeight * Platform.scale : ControlSize.regular.height)
+        .frame(height: (style == .sheet ? Theme.searchHeight : ControlSize.regular.height) * Platform.scale)
         .background { if style == .bar { Capsule().strokeBorder(Tokens.input.color, lineWidth: Theme.hairline) } }
         .overlay(alignment: .bottom) { if style == .sheet { Rule(color: Tokens.cardBorder) } }
         .onAppear { if autofocus { focused = true } }

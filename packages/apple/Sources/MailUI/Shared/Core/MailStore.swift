@@ -228,8 +228,13 @@ public final class MailStore {
         return "\(mailbox.name) · \(account.address)"
     }
 
+    /// The mailbox's name, or "Search" while searching.
     var mailboxName: String {
-        if searchRows != nil { return "Search" }
+        searchRows != nil ? "Search" : baseMailboxName
+    }
+
+    /// The mailbox's name, whether or not a search is on over it.
+    var baseMailboxName: String {
         let parts = baseMailbox.split(separator: "/").map(String.init)
         let name = allMailboxes.first(where: { $0.id == baseMailbox })?.name ?? "Inbox"
         guard parts.count > 1, let account = accounts.first(where: { $0.id == parts[0] }) else {
