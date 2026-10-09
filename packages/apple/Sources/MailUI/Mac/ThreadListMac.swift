@@ -339,7 +339,7 @@ final class ThreadRowView: NSTableRowView {
         if let row {
             Theme.accountColor(row.color).platform.setFill()
             let bottom: CGFloat = isLast ? 1 : 0
-            NSRect(x: column.minX, y: 1, width: Theme.accountBarWidth, height: column.height - 1 - bottom).fill()
+            NSRect(x: column.minX, y: 1, width: Theme.macAccountBarWidth, height: column.height - 1 - bottom).fill()
         }
     }
 

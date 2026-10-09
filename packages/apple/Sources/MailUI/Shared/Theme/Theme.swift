@@ -83,7 +83,8 @@ enum Theme {
     /// A thread row on iOS: sender, subject, snippet.
     static let iosRowHeight: CGFloat = 88
     /// The bar of the account's colour at the start of a thread row.
-    static let accountBarWidth: CGFloat = 2
+    static let macAccountBarWidth: CGFloat = 2
+    static let iosAccountBarWidth: CGFloat = 4
     /// The widest the list and the thread's card grow on the Mac.
     static let cardWidth: CGFloat = 1000
     static let sidebarWidth: CGFloat = 256
