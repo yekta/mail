@@ -5,14 +5,17 @@ import UIKit
 /// The thread list on iOS: a table that only makes the rows on screen. A swipe to the left
 /// deletes, snoozes or archives; one to the right opens the drawer, unless a row's actions are
 /// out, when it puts them away. In edit mode, rows are picked.
-struct ThreadListIOS: UIViewRepresentable {
+struct ThreadListIOS<Header: View>: UIViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
     let editing: Bool
     let checked: Set<String>
     /// False while the rows are the mailbox before; when they are the new one's, the list goes to the top.
     let ready: Bool
+    /// Scrolls with the rows, at their head; 0 hides it.
+    let headerHeight: CGFloat
     let open: (String) -> Void
+    @ViewBuilder let header: () -> Header
 
     func makeCoordinator() -> Coordinator { Coordinator(store: store, open: open) }
 
@@ -29,6 +32,10 @@ struct ThreadListIOS: UIViewRepresentable {
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         context.coordinator.table = table
+        let head = UIHostingController(rootView: header())
+        head.view.backgroundColor = .clear
+        head.safeAreaRegions = []
+        context.coordinator.head = head
         context.coordinator.keeper = ScrollKeeper(restore: store.listOffset, report: store.noteScroll)
         context.coordinator.keeper?.attach(table)
         return table
@@ -36,7 +43,8 @@ struct ThreadListIOS: UIViewRepresentable {
 
     func updateUIView(_ table: UITableView, context: Context) {
         context.coordinator.open = open
-        context.coordinator.update(rows: rows, editing: editing, checked: checked, ready: ready)
+        context.coordinator.head?.rootView = header()
+        context.coordinator.update(rows: rows, editing: editing, checked: checked, ready: ready, headerHeight: headerHeight)
     }
 
     @MainActor
@@ -44,6 +52,7 @@ struct ThreadListIOS: UIViewRepresentable {
         let store: MailStore
         var open: (String) -> Void
         weak var table: UITableView?
+        var head: UIHostingController<Header>?
         private var rows: [ThreadRow] = []
         private var texts: [String: (ThreadRow, RowText)] = [:]
         private var ready = true
@@ -56,8 +65,12 @@ struct ThreadListIOS: UIViewRepresentable {
             self.open = open
         }
 
-        func update(rows: [ThreadRow], editing: Bool, checked: Set<String>, ready: Bool) {
+        func update(rows: [ThreadRow], editing: Bool, checked: Set<String>, ready: Bool, headerHeight: CGFloat) {
             guard let table else { return }
+            if let head, table.tableHeaderView?.frame.height != headerHeight {
+                head.view.frame = CGRect(x: 0, y: 0, width: table.bounds.width, height: headerHeight)
+                table.tableHeaderView = head.view
+            }
             let switched = ready && !self.ready
             let changed = Self.changes(from: self.rows, to: rows)
             self.rows = rows
@@ -192,6 +205,16 @@ struct ThreadListIOS: UIViewRepresentable {
 final class ThreadTable: UITableView, OwnsRightSwipe {
     var swipedRow: IndexPath?
     var ownsRightSwipe: Bool { swipedRow != nil }
+    private var topInset: CGFloat = 0
+
+    /// The bar's height arrives after the table is made; a list at the top stays at the top.
+    override func adjustedContentInsetDidChange() {
+        super.adjustedContentInsetDidChange()
+        let atTop = contentOffset.y <= -topInset + 1
+        topInset = adjustedContentInset.top
+        guard atTop else { return }
+        contentOffset.y = -topInset
+    }
 }
 
 /// One thread on three lines: who wrote and the star, the subject, the snippet and the date.

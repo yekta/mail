@@ -158,8 +158,9 @@ final class ScrollKeeper: NSObject {
         scroll.reflectScrolledClipView(scroll.contentView)
     }
     #else
+    // Offsets are from the content's top, under the bars, so they mean the same whatever the bars' height.
     private static func offset(of scroll: UIScrollView) -> CGFloat {
-        scroll.contentOffset.y
+        scroll.contentOffset.y + scroll.adjustedContentInset.top
     }
 
     private static func height(of scroll: UIScrollView) -> CGFloat {
@@ -167,12 +168,12 @@ final class ScrollKeeper: NSObject {
     }
 
     private static func range(of scroll: UIScrollView) -> (CGFloat, CGFloat) {
-        let top = -scroll.adjustedContentInset.top
-        return (top, max(height(of: scroll) - scroll.bounds.height + scroll.adjustedContentInset.bottom, top))
+        let insets = scroll.adjustedContentInset
+        return (0, max(height(of: scroll) - scroll.bounds.height + insets.top + insets.bottom, 0))
     }
 
     private static func scroll(_ scroll: UIScrollView, to y: CGFloat) {
-        scroll.contentOffset = CGPoint(x: scroll.contentOffset.x, y: y)
+        scroll.contentOffset = CGPoint(x: scroll.contentOffset.x, y: y - scroll.adjustedContentInset.top)
     }
     #endif
 }

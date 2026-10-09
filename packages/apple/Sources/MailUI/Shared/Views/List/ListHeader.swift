@@ -4,6 +4,8 @@ import SwiftUI
 struct ListHeader: View {
     @Environment(MailStore.self) private var store
 
+    static let height = 38 * Platform.scale
+
     static func shows(_ store: MailStore) -> Bool {
         store.searchRows == nil && (!store.splits.isEmpty || store.filter != nil)
     }
@@ -23,7 +25,7 @@ struct ListHeader: View {
                         .padding(.trailing, Space.l)
                 }
             }
-            .frame(height: 38 * Platform.scale)
+            .frame(height: Self.height)
             .background(Tokens.background.color)
             .rule(.bottom)
         }
