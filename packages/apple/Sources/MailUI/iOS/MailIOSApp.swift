@@ -127,6 +127,7 @@ struct MailboxScreen: View {
             store: store, rows: store.rows, editing: editing, checked: store.selection, ready: store.listReady,
             headerHeight: ListHeader.shows(store) ? ListHeader.height : 0,
             bottomInset: FloatingButton.side + Space.l * 2,
+            refresh: store.checkMail,
             open: { thread in openThread(thread, path: $path, store: store) },
             header: { ListHeader().environment(store) }
         )
@@ -152,7 +153,6 @@ struct MailboxScreen: View {
                 .clearGlass()
             }
         }
-        .refreshable { await store.refresh() }
     }
 
     @ViewBuilder private var top: some View {
@@ -199,7 +199,8 @@ struct SearchScreen: View {
     var body: some View {
         ThreadListIOS(
             store: store, rows: store.searchRows ?? [], editing: false, checked: [], ready: true, keepsScroll: false,
-            headerHeight: 0, open: { thread in openThread(thread, path: $path, store: store) }, header: { EmptyView() }
+            headerHeight: 0, refresh: store.searchAgain, open: { thread in openThread(thread, path: $path, store: store) },
+            header: { EmptyView() }
         )
         .overlay {
             if store.searchRows?.isEmpty == true { EmptyList().background(Tokens.background.color) }

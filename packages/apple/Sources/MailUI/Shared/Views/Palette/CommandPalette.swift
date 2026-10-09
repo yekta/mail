@@ -93,6 +93,7 @@ struct CommandPalette: View {
         var items = [
             PaletteItem(id: "compose", title: "Compose", symbol: .squarePen, shortcut: "C", afterClosing: true) { store.newMessage() },
             PaletteItem(id: "undo", title: "Undo", symbol: .undo, shortcut: "Z") { store.undo() },
+            PaletteItem(id: "check-mail", title: "Check for new mail", symbol: .refreshCw) { Task { await store.checkMail() } },
             PaletteItem(id: "unread", title: store.filter == .unread ? "Show everything" : "Unread only", symbol: .listFilter, shortcut: "⇧U") {
                 store.toggleFilter(.unread)
             },

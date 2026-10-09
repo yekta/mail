@@ -26,6 +26,10 @@ pub enum ClientMessage {
         request: u64,
         query: String,
     },
+    /// Asks every account's worker to check with its provider now; `Synced` answers once they have.
+    Sync {
+        request: u64,
+    },
     Ping,
 }
 
@@ -65,6 +69,10 @@ pub enum ServerMessage {
     SearchResults {
         request: u64,
         message_ids: Vec<String>,
+    },
+    /// The answer to a `Sync`, after the changes the pass brought.
+    Synced {
+        request: u64,
     },
     Pong,
     /// The socket is closing: a bad token or a protocol the server doesn't speak.

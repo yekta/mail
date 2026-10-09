@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use futures_util::{StreamExt, stream};
 use mail_protocol::Op;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -21,6 +21,8 @@ use crate::providers::{Batch, Connection, Reauth, Refused, gmail};
 const PREFETCH: i64 = 100;
 const MAX_ATTEMPTS: i32 = 5;
 const DAILY: Duration = Duration::from_secs(24 * 60 * 60);
+/// How long a client asking for a sync now waits for the pass.
+const SYNC_NOW: Duration = Duration::from_secs(20);
 
 #[derive(Default)]
 pub struct Workers {
@@ -31,6 +33,8 @@ pub struct Workers {
 struct Running {
     wake: Arc<Notify>,
     connection: Arc<Mutex<Option<Connection>>>,
+    /// Counts the passes made, failed ones too, for those waiting on the next.
+    passes: watch::Sender<u64>,
     task: JoinHandle<()>,
 }
 
@@ -57,8 +61,9 @@ impl Workers {
         }
         let wake = Arc::new(Notify::new());
         let connection = Arc::new(Mutex::new(None));
-        let task = tokio::spawn(run(state.clone(), account_id, wake.clone(), connection.clone()));
-        running.insert(account_id, Running { wake, connection, task });
+        let passes = watch::Sender::new(0);
+        let task = tokio::spawn(run(state.clone(), account_id, wake.clone(), connection.clone(), passes.clone()));
+        running.insert(account_id, Running { wake, connection, passes, task });
     }
 
     pub fn stop(&self, account_id: Uuid) {
@@ -78,6 +83,25 @@ impl Workers {
         if let Some(worker) = self.running.lock().unwrap().get(&account_id) {
             worker.wake.notify_one();
         }
+    }
+
+    /// Wakes the user's workers and waits until each has made a pass, at most `SYNC_NOW`.
+    pub async fn sync_now(&self, state: &AppState, user_id: Uuid) {
+        let Ok(ids) = db::live_account_ids_of(&state.db, user_id).await else { return };
+        let waits: Vec<_> = ids.into_iter().filter_map(|id| self.wake_for_pass(id)).collect();
+        let _ = tokio::time::timeout(SYNC_NOW, futures_util::future::join_all(waits)).await;
+    }
+
+    /// Wakes a worker and gives what waits for its next pass; nothing when it doesn't run.
+    fn wake_for_pass(&self, account_id: Uuid) -> Option<impl Future<Output = ()>> {
+        let running = self.running.lock().unwrap();
+        let worker = running.get(&account_id).filter(|worker| !worker.task.is_finished())?;
+        worker.wake.notify_one();
+        let before = *worker.passes.borrow();
+        let mut passes = worker.passes.subscribe();
+        Some(async move {
+            let _ = passes.wait_for(|passes| *passes > before).await;
+        })
     }
 
     pub fn connection(&self, account_id: Uuid) -> Option<Connection> {
@@ -100,7 +124,13 @@ impl Workers {
 }
 
 /// Waits longer after each failure in a row, so a provider that refuses isn't asked again at once.
-async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mutex<Option<Connection>>>) {
+async fn run(
+    state: AppState,
+    account_id: Uuid,
+    wake: Arc<Notify>,
+    slot: Arc<Mutex<Option<Connection>>>,
+    passes: watch::Sender<u64>,
+) {
     let mut backoff = Duration::from_secs(2);
     loop {
         let Ok(Some(account)) = db::account(&state.db, account_id).await else { return };
@@ -108,7 +138,7 @@ async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mut
             Ok(connection) => {
                 *slot.lock().unwrap() = Some(connection.clone());
                 let worked = tokio::select! {
-                    worked = work(&state, account_id, &connection, &wake, &mut backoff) => worked,
+                    worked = work(&state, account_id, &connection, &wake, &passes, &mut backoff) => worked,
                     never = connection.push(&wake) => match never {},
                 };
                 if let Err(error) = worked
@@ -124,6 +154,7 @@ async fn run(state: AppState, account_id: Uuid, wake: Arc<Notify>, slot: Arc<Mut
             }
         }
         *slot.lock().unwrap() = None;
+        passes.send_modify(|passes| *passes += 1);
         let _ = tokio::time::timeout(backoff, wake.notified()).await;
         backoff = (backoff * 2).min(Duration::from_secs(300));
     }
@@ -146,6 +177,7 @@ async fn work(
     account_id: Uuid,
     connection: &Connection,
     wake: &Notify,
+    passes: &watch::Sender<u64>,
     backoff: &mut Duration,
 ) -> anyhow::Result<()> {
     let mut daily_at: Option<tokio::time::Instant> = None;
@@ -168,6 +200,7 @@ async fn work(
         db::set_account_status(&state.db, &account, "ready").await?;
         *backoff = Duration::from_secs(2);
         prefetch(state, &account, &background).await;
+        passes.send_modify(|passes| *passes += 1);
         let wait = if synced.backfilling { Duration::from_secs(2) } else { state.config.poll_interval };
         let _ = tokio::time::timeout(wait, wake.notified()).await;
     }

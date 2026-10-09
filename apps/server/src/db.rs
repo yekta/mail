@@ -230,6 +230,13 @@ pub async fn live_account_ids(db: &PgPool) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar("SELECT id FROM accounts WHERE NOT deleted AND status <> 'reauth'").fetch_all(db).await
 }
 
+pub async fn live_account_ids_of(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar("SELECT id FROM accounts WHERE user_id = $1 AND NOT deleted AND status <> 'reauth'")
+        .bind(user_id)
+        .fetch_all(db)
+        .await
+}
+
 pub async fn account_by_login(
     db: &PgPool,
     provider: Provider,

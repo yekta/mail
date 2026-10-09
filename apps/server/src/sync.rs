@@ -1,6 +1,6 @@
 //! The sync socket. After `Hello` the server sends every change after the client's cursor, in
-//! batches, then whatever changes next as it happens. Ops, body fetches and searches are
-//! answered on the same socket.
+//! batches, then whatever changes next as it happens. Ops, body fetches, searches and asking
+//! for a sync now are answered on the same socket.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -12,6 +12,7 @@ use futures_util::{SinkExt, StreamExt};
 use mail_protocol::PROTOCOL_VERSION;
 use mail_protocol::wire::{ClientMessage, ServerMessage};
 use tokio::sync::mpsc;
+use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::ops::{self, Outcome};
@@ -51,8 +52,15 @@ async fn run(state: AppState, socket: WebSocket) {
     });
 
     let mut changed = state.hub.subscribe(user_id);
-    let mut session =
-        Session { state: state.clone(), user_id, cursor, waiting_sends: HashSet::new(), caught_up: false, out };
+    let mut session = Session {
+        state: state.clone(),
+        user_id,
+        cursor,
+        waiting_sends: HashSet::new(),
+        caught_up: false,
+        syncs: JoinSet::new(),
+        out,
+    };
     let _ = session.out.send(ServerMessage::Welcome { protocol: PROTOCOL_VERSION }).await;
     let mut running = session.send_changes().await;
     while running {
@@ -67,6 +75,10 @@ async fn run(state: AppState, socket: WebSocket) {
                     _ => false,
                 };
             }
+            Some(Ok(request)) = session.syncs.join_next() => {
+                // The changes the pass brought go first, so the client is current when told so.
+                running = session.send_changes().await && session.send(ServerMessage::Synced { request }).await;
+            }
         }
     }
     writer.abort();
@@ -80,6 +92,8 @@ struct Session {
     waiting_sends: HashSet<String>,
     /// The first batch goes out even when empty, so the client knows it is up to date.
     caught_up: bool,
+    /// The syncs asked for, each answering with its request once the workers passed.
+    syncs: JoinSet<u64>,
     out: mpsc::Sender<ServerMessage>,
 }
 
@@ -144,6 +158,14 @@ impl Session {
         match message {
             ClientMessage::Hello { .. } => true,
             ClientMessage::Ping => self.send(ServerMessage::Pong).await,
+            ClientMessage::Sync { request } => {
+                let (state, user_id) = (self.state.clone(), self.user_id);
+                self.syncs.spawn(async move {
+                    state.workers.sync_now(&state, user_id).await;
+                    request
+                });
+                true
+            }
             ClientMessage::Mutate { op_id, op } => match ops::apply(&self.state, self.user_id, &op_id, op).await {
                 Ok(Outcome::Done { ok, error }) => self.send(ServerMessage::Applied { op_id, ok, error }).await,
                 Ok(Outcome::Waiting) => {

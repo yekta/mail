@@ -438,6 +438,11 @@ public final class MailStore {
         }
     }
 
+    /// Asks the server to check every account now; returns once it has, or gave up.
+    func checkMail() async {
+        _ = try? await bridge.call("refresh", as: Empty.self)
+    }
+
     func refresh() async {
         if let status = try? await bridge.call("status", as: Status.self) {
             signedIn = status.signedIn
@@ -1006,12 +1011,17 @@ public final class MailStore {
             searchRows = nil
             return
         }
-        Task {
-            guard let found = try? await bridge.call("search", ["query": query], as: SearchReply.self) else { return }
-            guard searchQuery == query else { return }
-            searchRequest = found.request
-            searchRows = found.rows
-        }
+        Task { await searchAgain() }
+    }
+
+    /// Runs the current search, for the server's newest matches too.
+    func searchAgain() async {
+        let query = searchQuery
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard let found = try? await bridge.call("search", ["query": query], as: SearchReply.self) else { return }
+        guard searchQuery == query else { return }
+        searchRequest = found.request
+        searchRows = found.rows
     }
 
     func endSearch() {
