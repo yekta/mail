@@ -339,6 +339,9 @@ pub enum Command {
     Search {
         query: String,
     },
+    /// Asks the server to check every account with its provider now, reconnecting first when
+    /// offline. `{}` once the server has, or after a while when it can't be reached.
+    Refresh,
 }
 
 fn default_limit() -> usize {

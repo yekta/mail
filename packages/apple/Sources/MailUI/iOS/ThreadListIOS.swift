@@ -4,7 +4,7 @@ import UIKit
 
 /// The thread list on iOS: a table that only makes the rows on screen. A swipe to the left
 /// deletes, snoozes or archives; one to the right opens the drawer, unless a row's actions are
-/// out, when it puts them away. In edit mode, rows are picked.
+/// out, when it puts them away. A pull from the top refreshes. In edit mode, rows are picked.
 struct ThreadListIOS<Header: View>: UIViewRepresentable {
     let store: MailStore
     let rows: [ThreadRow]
@@ -18,6 +18,8 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
     let headerHeight: CGFloat
     /// Room under the last row, for what floats over the list.
     var bottomInset: CGFloat = 0
+    /// What a pull from the top does; the control spins until it returns. None hides it.
+    var refresh: (() async -> Void)?
     let open: (String) -> Void
     @ViewBuilder let header: () -> Header
 
@@ -37,6 +39,12 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
         table.allowsMultipleSelectionDuringEditing = true
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
+        if refresh != nil {
+            let control = UIRefreshControl()
+            control.tintColor = Tokens.mutedForeground.platform
+            control.addTarget(context.coordinator, action: #selector(Coordinator.pulled(_:)), for: .valueChanged)
+            table.refreshControl = control
+        }
         context.coordinator.table = table
         let head = UIHostingController(rootView: header())
         head.view.backgroundColor = .clear
@@ -51,6 +59,7 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
 
     func updateUIView(_ table: UITableView, context: Context) {
         context.coordinator.open = open
+        context.coordinator.refresh = refresh
         context.coordinator.head?.rootView = header()
         context.coordinator.update(rows: rows, editing: editing, checked: checked, ready: ready, headerHeight: headerHeight)
     }
@@ -59,6 +68,7 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
     final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate {
         let store: MailStore
         var open: (String) -> Void
+        var refresh: (() async -> Void)?
         weak var table: UITableView?
         var head: UIHostingController<Header>?
         private var rows: [ThreadRow] = []
@@ -161,6 +171,13 @@ struct ThreadListIOS<Header: View>: UIViewRepresentable {
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             schedulePrefetch()
+        }
+
+        @objc func pulled(_ control: UIRefreshControl) {
+            Task {
+                await refresh?()
+                control.endRefreshing()
+            }
         }
 
         /// Asks for the bodies of the rows on screen once the list stops moving.

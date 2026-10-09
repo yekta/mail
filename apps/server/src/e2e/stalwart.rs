@@ -174,3 +174,51 @@ async fn new_mail_at_stalwart_is_pushed_without_waiting_for_a_poll(db: PgPool) {
     })
     .await;
 }
+
+#[sqlx::test]
+async fn a_refresh_answers_once_the_server_has_synced(db: PgPool) {
+    let Some((stalwart, email, jmap)) = stalwart_user(5).await else { return };
+    let server = Server::start_with(db, |config| {
+        config.workers = true;
+        config.poll_interval = Duration::from_secs(3600);
+    })
+    .await;
+    let mut core = Driver::start(&server.base);
+    core.call(json!({ "type": "add_jmap_account", "url": stalwart, "username": email, "password": PASSWORD })).await;
+    eventually("the inbox in the core", async || (!inbox_rows(&mut core).await.is_empty()).then_some(())).await;
+
+    let mailboxes = jmap
+        .call(
+            &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+            vec![("Mailbox/get", json!({ "ids": null, "properties": ["id", "role"] }))],
+        )
+        .await
+        .unwrap();
+    let inbox =
+        mailboxes[0]["list"].as_array().unwrap().iter().find(|mailbox| mailbox["role"] == "inbox").unwrap()["id"]
+            .clone();
+    let raw = mail_builder::MessageBuilder::new()
+        .from(("Ada Lovelace", "ada@example.com"))
+        .to(email.as_str())
+        .subject("Pulled down for")
+        .text_body("Hello.")
+        .write_to_vec()
+        .unwrap();
+    let blob = jmap.upload(raw).await.unwrap();
+    jmap.import(vec![json!({ "blobId": blob, "mailboxIds": { inbox.as_str().unwrap(): true } })]).await.unwrap();
+
+    let started = std::time::Instant::now();
+    core.call(json!({ "type": "refresh" })).await;
+    assert!(started.elapsed() < Duration::from_secs(10), "the server answered, not the core's timeout");
+    assert!(inbox_rows(&mut core).await.iter().any(|row| row["subject"] == "Pulled down for"), "there when answered");
+}
+
+#[sqlx::test]
+async fn a_refresh_answers_at_once_when_no_worker_runs(db: PgPool) {
+    let server = Server::start(db).await;
+    let mut core = Driver::start(&server.base);
+    core.call(json!({ "type": "dev_login", "email": "pull@example.com" })).await;
+    let started = std::time::Instant::now();
+    core.call(json!({ "type": "refresh" })).await;
+    assert!(started.elapsed() < Duration::from_secs(5), "the server answered, not the core's timeout");
+}

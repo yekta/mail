@@ -46,6 +46,8 @@ const STEP: usize = 100;
 const CHANGED_EVERY: Duration = Duration::from_millis(80);
 /// How many actions `Undo` can take back.
 const UNDO_DEPTH: usize = 30;
+/// How long a `Refresh` waits for the server before answering anyway.
+const REFRESH_WAIT: Duration = Duration::from_secs(15);
 /// Only mail this recent is announced.
 const NEW_MAIL_WINDOW: i64 = 2 * 86_400_000;
 
@@ -139,6 +141,8 @@ pub fn start(config: Config, sink: Sink) -> Result<Handle> {
         actions: 0,
         first_sync: false,
         arrived: Vec::new(),
+        refreshing: Vec::new(),
+        refresh: 0,
     };
     core.announcing = core.ready_accounts();
     tokio::spawn(async move {
@@ -211,6 +215,9 @@ struct Core {
     /// in meta once done.
     first_sync: bool,
     arrived: Vec<Arrived>,
+    /// The `Refresh` commands waiting for the server's `Synced`, and the number of the wait.
+    refreshing: Vec<u64>,
+    refresh: u64,
 }
 
 fn random_hex() -> String {
@@ -446,7 +453,39 @@ impl Core {
             Command::OpenAttachment { message, index } => return self.open_attachment(id, &message, index),
             Command::PrintThread { thread } => self.print_thread(&thread),
             Command::Search { query } => return self.search(id, query),
+            Command::Refresh => return self.refresh(id),
         })
+    }
+
+    /// Asks the server for a sync now and answers once it has synced. Refreshes asked for
+    /// meanwhile join the one under way. Offline, the link is made anew at once instead of
+    /// after its backoff, and the ask goes out with the hello.
+    fn refresh(&mut self, id: u64) -> Option<Result<Value>> {
+        if self.demo || self.token().is_none() {
+            return Some(Ok(json!({})));
+        }
+        self.refreshing.push(id);
+        if self.refreshing.len() > 1 {
+            return None;
+        }
+        self.next_request += 1;
+        self.refresh = self.next_request;
+        let request = self.refresh;
+        match self.online() {
+            true => self.send(ClientMessage::Sync { request }),
+            false => self.connect(),
+        }
+        self.spawn(tokio::time::sleep(REFRESH_WAIT), move |core, _| core.refreshed(request));
+        None
+    }
+
+    fn refreshed(&mut self, request: u64) {
+        if request != self.refresh {
+            return;
+        }
+        for id in std::mem::take(&mut self.refreshing) {
+            self.reply(id, Ok(json!({})));
+        }
     }
 
     fn status(&self) -> Result<Value> {
@@ -1396,6 +1435,9 @@ impl Core {
                     self.dispatch(op_id, op);
                 }
                 self.pump_bodies();
+                if !self.refreshing.is_empty() {
+                    self.send(ClientMessage::Sync { request: self.refresh });
+                }
             }
             ServerMessage::Changes { accounts, labels, messages, preferences, drafts, cursor, more } => {
                 let mut parts: Vec<Part> = Vec::new();
@@ -1444,6 +1486,11 @@ impl Core {
                 }
                 let rows = self.store.rows_of(&threads, &Local::now()).unwrap_or_default();
                 self.emit(Event::SearchResults { request, rows });
+            }
+            ServerMessage::Synced { request } => {
+                if request == self.refresh {
+                    self.refreshed(request);
+                }
             }
             ServerMessage::Pong => {}
             ServerMessage::Refused { reason } => {
