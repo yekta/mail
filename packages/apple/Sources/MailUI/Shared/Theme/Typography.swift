@@ -44,8 +44,9 @@ enum TextStyle {
 
     var weight: PlatformFont.Weight {
         switch self {
-        case .display, .title, .heading, .subheading, .overline, .footnoteStrong: .semibold
+        case .display, .title, .heading, .subheading, .overline: .semibold
         case .bodyStrong, .labelStrong: .medium
+        case .footnoteStrong: .bold
         case .body, .label, .caption, .footnote, .mono: .regular
         }
     }
