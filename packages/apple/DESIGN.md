@@ -79,7 +79,7 @@ added to the component, not to the view.
 | `Avatar` | Initials in a circle of the address's colour |
 | `SwatchRow` | The account colours on a line, to pick one |
 | `Rule`, `.rule(edge)` | A hairline, in `border` or in `cardBorder` |
-| `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page: the Mac's, and iOS's over the list; with a `center`, the sides split what it leaves |
+| `Sheet`, `HeaderBar` | Every sheet's shell, and the bar across the top of a page: the Mac's, and iOS's over the list; with a `center`, the sides split what it leaves; `inset` is the space to its edges |
 | `FlowLayout` | Wrapping layout for chips |
 
 The gallery shows all of them in every state: open the palette (⌘K) and pick "Component

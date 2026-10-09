@@ -90,6 +90,8 @@ extension Sheet where Trailing == EmptyView {
 /// and what trails.
 struct HeaderBar<Leading: View, Center: View, Trailing: View>: View {
     var title: String?
+    /// The space between the bar's edges and its first and last control.
+    var inset: CGFloat = Space.l
     let leading: Leading
     let center: Center?
     let trailing: Trailing
@@ -97,18 +99,22 @@ struct HeaderBar<Leading: View, Center: View, Trailing: View>: View {
     /// Leading at the left, trailing at the right, and `center` in the middle of the bar: it takes
     /// its own width and the sides split the rest.
     init(
-        title: String? = nil, @ViewBuilder leading: () -> Leading, @ViewBuilder center: () -> Center,
-        @ViewBuilder trailing: () -> Trailing
+        title: String? = nil, inset: CGFloat = Space.l, @ViewBuilder leading: () -> Leading,
+        @ViewBuilder center: () -> Center, @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
+        self.inset = inset
         self.leading = leading()
         self.center = center()
         self.trailing = trailing()
     }
 
-    init(title: String? = nil, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing)
-    where Center == EmptyView {
+    init(
+        title: String? = nil, inset: CGFloat = Space.l, @ViewBuilder leading: () -> Leading,
+        @ViewBuilder trailing: () -> Trailing
+    ) where Center == EmptyView {
         self.title = title
+        self.inset = inset
         self.leading = leading()
         self.center = nil
         self.trailing = trailing()
@@ -131,7 +137,7 @@ struct HeaderBar<Leading: View, Center: View, Trailing: View>: View {
                 Text(title).textStyle(.subheading).lineLimit(1).allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, Space.l)
+        .padding(.horizontal, inset)
         .frame(height: Theme.barHeight)
     }
 }

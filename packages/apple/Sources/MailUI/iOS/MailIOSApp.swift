@@ -159,33 +159,19 @@ struct MailboxScreen: View {
     }
 
     private var bar: some View {
-        HeaderBar {
+        HeaderBar(inset: Space.s) {
             IconButton(symbol: .menu, help: "Mailboxes", circled: false, action: openDrawer)
         } center: {
             Text(store.baseMailboxName).textStyle(.subheading).lineLimit(1)
         } trailing: {
             IconButton(symbol: .search, help: "Search", circled: false) { path.append(.search) }
-            IconMenu(symbol: .ellipsis, help: "More", circled: false) {
-                Button { editing = true } label: { Label { Text("Select") } icon: { Image(.squareCheck, size: 15) } }
-                Button { store.toggleFilter(.unread) } label: {
-                    Label { Text(store.filter == .unread ? "Show everything" : "Unread only") } icon: { Image(.listFilter, size: 15) }
-                }
-                Button { store.toggleFilter(.starred) } label: {
-                    Label { Text(store.filter == .starred ? "Show everything" : "Starred only") } icon: { Image(.star, size: 15) }
-                }
-                Button { store.showPalette() } label: { Label { Text("Commands") } icon: { Image(.command, size: 15) } }
-                if !store.rows.isEmpty {
-                    Divider()
-                    Button(action: store.archiveAll) { Label { Text("Get Me To Zero") } icon: { Image(.archive, size: 15) } }
-                }
-            }
         }
         .topBar()
     }
 
     private var editingBar: some View {
         let all = store.selection.count == store.rows.count
-        return HeaderBar {
+        return HeaderBar(inset: Space.s) {
             ActionButton(title: all ? "Select None" : "Select All", variant: .ghost) { all ? store.clearSelection() : store.selectAll() }
         } center: {
             Text("\(store.selection.count) Selected").textStyle(.subheading).lineLimit(1)
